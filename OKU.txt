@@ -1,0 +1,293 @@
+TETHER  v2.12.3
+==============
+Premiere Pro paneli: videodaki bir nesneyi (yuz, kafa, top...) kare kare izler ve
+hedef klibin Position / Scale / Rotation animasyonuna cevirir (After Effects tarzi takip).
+
+KURULUM
+  Windows : kur.bat dosyasina cift tikla
+  Mac     : kur.command dosyasini calistir
+  Sonra Premiere'i kapatip ac:  Window > Extensions > Tether
+  Eski "Mask Takip" paneli varsa kurulum onu otomatik kaldirir. Kaldirmak icin: sil.bat
+
+KULLANIM (Takip sekmesi)
+  1) Takip edilecek klibi timeline'da sec, oynatma cubugunu nesnenin gorundugu kareye koy  ->  "Kare al"  ->  nesnenin ustune kutu ciz  ->  "Takip et"
+  2) Takibin uygulanacagi klip(ler)i sec  ->  "Seçili klipleri al"
+  3) Modu sec  ->  "Uygula"
+  Onizleme ustte: ayar degistikce canli guncellenir; kare kaydirici, oynat, ve onizlemede
+  surukleyerek hedef konumu / kadraj konumu ayarlanir. Alttaki tutacla boyutu degistir
+  (cift tikla: kucult/buyut).
+
+v2.12.3:
+  - Yalniz metin degisikligi: arayuzde ve mesajlarda "maskeli klip / takipli maske" ifadeleri kaldirildi (takip edilecek klip, hedef klip). Islevlere dokunulmadi.
+
+v2.12.2:
+  - kur.bat: ffmpeg zaten kuruluysa "ffmpeg zaten kurulu, indirme atlandi" yazar; yoksa indirir ve sonucu yazar.
+
+v2.12.1:
+  - Kurulum: ffmpeg yoksa kur.bat (Mac: kur.command) otomatik indirir ve kurar; kullanicinin elle bir sey yapmasi gerekmez.
+
+v2.12.0:
+  - IKI KUTU (After Effects gibi): mavi = Takip bolgesi (neyi izledigi), turuncu kesikli = Arama bolgesi (nesneyi nerede aradigi).
+    Turuncu kutunun kenarlarini surukleyip yatay / dikey ayri ayri buyutup kucultebilirsin. "Dar / Normal / Genis" hazir ayardir.
+    Daralan arama bolgesi takibi hizlandirir ve yanlis nesneye kaymayi azaltir; hizli nesnede genislet.
+  - Nokta takibinin birakip gectigi bosluklar artik SABLON eslestirmeyle doldurulur (zayif / sari isaretli, kenarlarda kaydirma duzeltmesiyle).
+    Yuz videosunda yuz yana doneyken takip kopuyordu: 113 kare -> 172 kare, kutu yuzu izliyor.
+  - Sahne kesmesi / ani plan degisimi algilanir ve mesajda kare numarasi yazilir; sablon takibi kesme karesine konum uydurmaz.
+  - Izleme yolu guvene gore renkli (yesil guclu, sari zayif); o karedeki kutu zayifsa sari.
+  - Takipsiz karede kutu, komsu izlenen karelerden otomatik ONERILIR; sadece ince ayar yap, "Buradan ileri / geri takip"e bas.
+  - Olcum (elle isaretlenmis futbol topu 13 kare): dogru 3 -> 10. Cizgi film govdesi 2 -> 68/68 kare, kirmizi top 2 -> 39/68 (hepsi 8 px icinde).
+  - Bilinen sinir: top bacaga degince / kapaninca yine kayabilir; kesme sonrasi nesne cok farkli gorunuyorsa elle duzeltme gerekir.
+
+v2.11.3:
+  - "Buradan ileri / geri takip" artik butun takibi yeniden yazmaz. Duzelttigin kare bir "capa" olur (grafikte acik mavi cizgi);
+    yeniden takip yalnizca bir sonraki (geri icin bir onceki) duzeltilmis kareye kadar gider, onun otesindeki duzeltmelerin korunur.
+    Ilk duzeltmede eskisi gibi sona kadar gider.
+
+v2.11.2:
+  - "N kare izlendi / ilerleme" mesaji artik videonun ve oynaticinin hemen ustunde (eskiden en altta kaliyordu).
+
+v2.11.1:
+  - Arayuz: video oynatma cubugu artik kare goruntusunun HEMEN ALTINDA (oynat / onceki kare / sonraki kare + kaydirici + guven grafigi
+    + zayif kare dugmeleri + "Buradan geri / ileri takip"). Ayarlar ve "Takip et" altta kaldi.
+  - Arayuz: renkli tema (sekme renkleri, mor-turkuaz baslik, renkli dugmeler). Takip mantigi degismedi.
+  - Alttaki durum satirindaki eski surum yazisi duzeltildi.
+
+v2.11.0:
+  - YENI: "Yontem" secimi. Otomatik: once nokta takibi; cok az kare izlerse (duz renkli cizgi film, hizli kucuk nesne) SABLON ESLESTIRME dener
+    ve daha cok kare izleyeni secer. Sablon yontemi After Effects'teki gibi: arama bolgesi + hiz tahmini + gorunumu uyarlama,
+    nesne kapaninca bekler, geri gelince bulur.
+  - YENI: "Arama bolgesi" (Dar / Normal / Genis). Cok hizli nesnede Genis sec.
+  - Olcum (4 videoda): cizgi film govdesi 2/68 -> 68/68 kare; kirmizi top 2/68 -> ~40/68 (hepsi 8 px icinde, medyan ~1 px);
+    futbol topu elle isaretlenen 13 karede dogru 3 -> 10. Yuz / kafa videolarinda eski nokta takibi AYNEN korundu (birebir ayni sonuc).
+  - Sinir: futbol gibi cok zor sahnede top kapaninca / ayaga degince yine kayabilir; guven grafigindeki sari / kirmizi karelere gidip
+    kutuyu topa cekip "Buradan ileri" de.
+
+v2.10.0:
+  - Takip konumlari v2.9.9 ile BIREBIR ayni (4 videoda olculdu); yalniz inceleme araclari eklendi.
+  - Guven grafigi: kaydirici altinda her kare icin renk (yesil guclu, sari zayif, kirmizi takipsiz). Grafige tiklayinca o kareye gider.
+  - "Onceki / Sonraki zayif kare" dugmeleri; takip bitince kac karenin zayif oldugu yazilir.
+  - "Gorunumu uyarla" anahtari (After Effects'teki Adapt Feature): kapatilirsa sablon sabit kalir.
+  - Bilinen sinir: duz renkli (dokusuz) cizgi film nesneleri ve cok hizli top gibi kucuk nesneler hala zayif izleniyor.
+
+v2.9.9:
+  - Kendi takibim: yuz doner / mimik degisirken takip artik kopmuyor. Eskiden nokta takibi saglikli olsa bile sablonla benzerlik yavasca
+    dusunce (yuz yana donup guluncede) "kapandi" sanilip takip birakiliyordu. Simdi nokta takibi saglikli (cogu nokta tutuyor) ve dusus
+    YAVASSA sablon simdiki gorunume yenilenir (After Effects'teki "Adapt Feature on Every Frame"). Ani dusus (kapanma) yine takibi durdurur.
+    Gercek videoda 173 kareden 26 -> 153 kare takip; referans takibe gore sapma medyan 1.7 px.
+  - Yeni takip verisi gerekir: eski sonuclar degismez, yeniden "Takip et".
+
+v2.9.8:
+  - Takip kodu (track.js ve main.js) v2.9.5 ile BIREBIR ayni. v2.9.7'deki doku esigi degisikligi geri alindi.
+  - Kalan farklar yalniz arayuz: Premiere maskesi anahtari gizli, kutu cizme ekrani boyut siniri, baslik surumu.
+
+v2.9.7 (esik degisikligi geri alindi, kutu ekrani siniri duruyor):
+  - Takip: v2.9.5'te eklenen doku esigi fazla yuksekti; bulanik / buyutulmus videodaki (ornegin TikTok) puruzsuz yuz "doku yok" diye
+    reddediliyor, panel otomatik hassas modla yeniden deniyordu. Esik 40 -> 15 (hassas yeniden denemede 6). Sentetik bulanik yuz sahnesinde
+    eski surumle ayni basari; arkadan kafa sahnesi korundu.
+  - "Kare al" sonrasi kutu cizme ekrani panel yuksekliginin %48'i ile sinirlandi (oran korunur); dikey videoda paneli kaplamaz.
+  - Uniform Scale kapaliyken (Scale Width ve Height farkli) konum eslemesi sayisal olarak dogrulandi (0 px hata). Kadraj takibi modu
+    Scale'i tek degerle yazar, o modda Uniform Scale'i acik tut.
+
+v2.9.6:
+  - "Takip kaynagi" anahtari (Premiere maskesi / Kendi takibim) arayuzden gizlendi; her zaman Kendi takibim. Kod yerinde duruyor,
+    geri acmak icin index.html'de #srcSeg'den "hidden" sinifini kaldirip ui.js'teki setSrc('own') satirini eski haline getir.
+  - Baslikta gorunen surum numarasi guncellendi.
+
+v2.9.5:
+  - Kendi takibim, arkadan kafa / dokusuz saç: kose aramasi artik kutunun elips cekirdeginde yapilir (kutu koselerindeki sabit arka plana
+    kilitlenmez) ve mutlak bir doku esigi var (gurultu / duz yuzey kose sanilmaz). Sentetik arkadan-kafa sahnesinde hata 31 px -> ~1 px.
+  - Yeterli doku yoksa takip baslamaz ve nedenini soyler (duz saç / duz kiyafet). Kutuyu saç cizgisi, kulak, yaka gibi dokulu yeri
+    icine alacak sekilde ciz.
+
+v2.9.4:
+  - Kendi takibim: yeni "Takip modeli" secimi. Varsayilan "Yalniz konum (kafa / yuz)": olcek ve donme hic tahmin edilmez, birikmez.
+    Eskiden her karede olcek/donme hesaplanip toplaniyordu; kafa gibi kati olmayan nesnelerde kucuk hatalar birikip hedef kendi kendine
+    buyuyor / donuyordu. "Konum + olcek" ve "Konum + olcek + donme" modlari duruyor (olcek 0.45x-2.2x disina cikarsa o karede yalniz konum kullanilir).
+  - Eski sonuclar etkilenmez; yeniden "Takip et" gerekir.
+
+v2.9.3:
+  - 'Canli uygula' artik her acilista kapali baslar (eskiden hatirlanip kendiliginden keyframe yaziyor / oynatma basligini oynatiyordu).
+  - ffmpeg kurulumda silinmez: kur.bat / kur.command mevcut ffmpeg'i korur; ayrica CEP\Tether_ffmpeg klasorune de bakilir.
+  - ffmpeg yarida kesilirse uyarir; gunluk 40k karakterle sinirli; ayni noktada birden cok klip varsa yanlis klibe yazmaz.
+
+v2.9.2:
+  - Boyut takibi: "Yazi / grafik" hazir ayari artik boyut ve donme takibini ACMAZ (izleyicinin olcek tahmini uzun takipte kayabiliyor, hedef kendi
+    kendine buyuyordu). Olcek serisi daha cok yumusatilir ve 0.4x-2.5x ile sinirlanir; hedef >1.5x degisirse Gunluk uyarir.
+
+v2.9.1:
+  - Izleyici: kapanma tespiti yalniz guclu dokuda ve ani dususte tetiklenir (pürüzsüz yuz / bulanik videoda yanlis "kapandi" demesin).
+    Bekleme sirasinda takibi dogrudan surdurmeyi dener. ~%20 daha hizli. Neredeyse hic takip yoksa otomatik hassas modla yeniden dener.
+    Gunluk'e "Takip tanisi" satiri yazar.
+
+v2.9:
+  - Kendi takibim oncelikli (varsayilan); Premiere maskesi "eski" olarak ikinci sirada, araclari Araclar'a tasindi.
+  - Izleyici: nesne bir seyin arkasina gecince durmaz; bekler, geri gorununce (olcek degisse bile) yeniden bulur. Yanlis nesneye
+    kilitlenmemek icin muhafazakar: emin olmazsa o kareleri bos birakir.
+  - Takip sirasinda ilerleme % ve Durdur dugmesi (panel donmaz).
+  - Incele ve duzelt: kaydiriciyla kareye git, kutuyu nesneye cek, "Buradan ileri / geri" ile yeniden takip et (oncekiler korunur).
+  - Donme takibi: "Hedef nesneyle donsun" (Rotation keyframe'leri; Motion veya Transform; Geri al dahil).
+  - Menu sadelesti: Ayarlar'da yalniz hareket kalitesi + genel; gelismis ve sorun giderme kapali bolumlerde.
+
+v2.8.1:
+  - Yazilan keyframe'ler Premiere'den geri okunur; eksik olan varsa yeniden yazilir (en cok 2 tur). Gunluk'e "Position: 85/85 keyframe
+    dogrulandi" yazilir; Premiere bir kismini tutmazsa uyari verir.
+  - Motion <-> Transform temizligi artik sorar: digerinin animasyonu bu oturumda Tether tarafindan yazilmadiysa "temizlensin mi?" diye onay
+    ister (kendi animasyonunu habersiz silmez). Tether'in kendi yazdigini sormadan temizler.
+
+v2.8:
+  - Motion <-> Transform gecisi: digerinin animasyonu kalirsa ikisi ust uste biniyordu (cift kayma). Artik uygulamadan once digeri etkisiz
+    yapilir: Transform'a yazarken Motion Position/Scale animasyonu temizlenir; Motion'a yazarken Transform efekti notr yapilir
+    (anahtarlar silinir, konum = anchor, olcek 100). Efekt SILINMEZ (Premiere'in guvenli bir tek-efekt silme komutu yok); istersen elle sil.
+  - Transform ozellikleri artik sabit siraya gore de bulunur (onay kutularinin adi bos geliyor, Uniform Scale kapaliyken "Scale"
+    adi "Scale Height" oluyor). Shutter Angle / "Use Composition's Shutter Angle" yazildiktan sonra dogrulanir; olmazsa panel uyarir.
+  - Hazir ayar secimi artik acilir kutuda gorunur kalir; ayarlardan biri elle degisince "Ozel (elle ayarli)"ye doner.
+
+v2.7: Transform EFEKTINE aktar (hareket bulaniklagi / Shutter Angle)
+  - Takip sekmesi > "Uygulama yeri": Motion (varsayilan) | Transform efekti. Transform'da Position / Scale keyframe'leri Transform efektine
+    yazilir; "Shutter Angle" (varsayilan 180) girilirse "Use Composition's Shutter Angle" kapatilip Shutter Angle ayarlanir (0 = dokunma).
+  - Klipte Transform efekti yoksa QE DOM ile eklemeyi dener; olmazsa uyari verir (Effects > Video Effects > Distort > Transform'u elle ekle).
+  - Motion'in konum / olcek / anchor / klip boyutu hesaba katilir (dizi konumu <-> Transform klip konumu donusumu).
+  - Kadraj takibinde (follow) Transform'a yazilinca zoom Motion olcegine gore duzeltilir. Geri al / Animasyonu sifirla secili yere gore calisir.
+
+v2.6:
+  - Kendi takibim: kutu artik tasinabilir (icinden tut) ve boyutlandirilabilir (kenar / kosesinden). Bos yere tiklamak kutuyu silmez.
+  - "Ayarlari varsayilana dondur" artik Ayarlar sekmesinde AYRI dugme; alttaki "Animasyonu sifirla" yalniz keyframe'leri siler (ikisi karisiyordu).
+  - Onceki sahnelerin keyframe'lerini koru (Ayarlar > Keyframe'ler, acik): ayni klibe ikinci uygulamada yalniz yeni takibin zaman araligi
+    degisir; onceki / sonraki sahne anahtarlari silinmez, aralarina "tutma" anahtari konur (yazi sahneler arasinda kaymaz).
+    "Takip et" modunda taban konum, yeni araliktan onceki son anahtardan alinir.
+  - "Geri al" artik yalniz SON uygulamayi geri alir (eskiden en bastaki duruma donuyordu).
+
+v2.5: Daha dayanikli izleyici + sade menu
+  - Izleyici: nesne kapaninca / kaybolunca artik durmaz; bekler (en cok 60 kare), sablon eslemeyle (ZNCC) geri bulur ve devam eder.
+    Hizli harekette hiz tahmini kullanir, benzer dokulu baska nesnelerden etkilenmez. Kapali kareler bos birakilir (uydurulmaz).
+    Zor test videosunda (benzer nesneler, hizli hareket, 8 karelik kapanma): 112/112 gorunur karede dogru, ort. hata ~1 px.
+  - Menu: "Takip kaynagi" tek kartta (Premiere maskesi | Kendi takibim). Moda ozel secenekler (Kadraj, Yerlesim, Boyut takibi, Konum)
+    Ayarlar'dan cikarilip Takip sekmesinde Mod'un hemen altina tasindi. Ust satirda "Sira" ipucu. Ayarlar'da genel ayarlar kaldi.
+
+v2.4: KENDI TAKIBIM (beta) - Premiere maskesi olmadan After Effects tarzi izleme
+  - Takip sekmesi > "Kendi takibim": klibi sec, oynatma cubugunu nesnenin gorundugu kareye koy, "Kare al", nesnenin ustune
+    dikdortgen ciz, "Takip et". Konum + olcek + donme izlenir; sonuc mevcut tum modlarda (Takip et / Ustune tasi / Kadraj / Sabitle,
+    yumusatma, boyut takibi, yerlesim) kullanilir. Tek tek kare sorunu yok: nesne kaybolursa izleyici durur ve bildirir.
+  - Gerekli: ffmpeg. ffmpeg.exe dosyasini Tether klasorune (manifest'in oldugu yer, Tether\ffmpeg.exe) koy ya da PATH'e ekle.
+    Surum: ffmpeg.org / gyan.dev "essentials" yeterli. Panelde yoksa uyari verir.
+  - Yontem: piramidal Lucas-Kanade + ileri-geri dogrulama + saglam benzerlik donusumu; kareler 480/640/960 genislikte okunur
+    ("Hizli / Dengeli / Hassas"). Yalniz video dosyasi olan kliplerde (nest / grafik degil). Hiz degisikligi (speed) varsa kullanma.
+  - Sahte videoda dogrulandi: 90 karenin 90'i, konum hatasi < 1 px, donme < 1 derece, olcek ~%2.
+
+v2.3:
+  - "Object Mask takibini duzelt" (Ayarlar > Gelismis, acik): Premiere nesneyi kaybedince olusan guvenilmez uc kareleri kirpar
+    (merkez sicramasi nesne boyutunu asarsa kopus sayilir, en uzun saglam parca tutulur) ve kutu titremesini 5'li ortanca suzgecle giderir.
+    Hicbir kare uydurulmaz. Analiz et'te uygulanir.
+  - Ayarlar > "Varsayilan ayarlara don": tum ayarlari ilk haline getirir.
+
+v2.2.1:
+  - PRMF: Premiere'in "nesne kaybedildi" isareti (1 baytlik chunk + tum kare kutusu) artik dosyayi gecersiz kilmaz; o kayit atlanir,
+    kalan gercek kareler okunur ve panel "Premiere nesneyi kaybetti" der.
+
+v2.2:
+  - Boyut takibi (Takip / Ustune tasi): hedefin Scale'i nesne boyutuyla birlikte degisir (maske takibindeki gibi). Normal maskede
+    tracker matrisinden, Object Mask'te kutu boyutundan. Yazi hedefinde kare merkezinden kayma telafi edilir. Presetlerde "Yazi" acik gelir.
+    Hedefte Uniform Scale kapaliysa uyarir. Geri al, Scale'i de eski haline dondurur.
+
+v2.1:
+  - Yanlis uyarilar giderildi: her maskede bulunan BOS Object Mask yuvasi artik "Object Mask algilandi" sayilmaz; takipli bir maske
+    varsa takipsiz maskeler uyari vermez. "Pen/Ellipse ayrimi belirlenemedi" notu kaldirildi.
+  - Uniform Scale: maskeli klipte kapaliysa X (Scale Width) ve Y olcegi ayri hesaba katilir (Ustune tasi / Takip et / Sabitle).
+    Kadraj takibinde Uniform Scale kapaliysa uyari verir (orani korumak icin ac).
+  - Yerlesim (Ustune tasi): etiketi nesne kutusunun ustune / altina / soluna / sagina bosluk (px) ile koyar; nesne yaklasip
+    uzaklasinca etiket kenarda kalir. Yalniz Object Mask (kutu verisi olan) takipte.
+  - Hazir ayarlar (Takip sekmesi, Mod altinda): oyun etiketi, nisan/isaret kilidi, yumusak kamera (kill-cam), yazi takibi, sabitleme.
+
+v2.0: Object Mask artik "dogrulanmadi" degil
+  - Zaman tabani (kaynak medya zamani) ve koordinat (sol-ust, nesne kutusu merkezi) farkli klip / videolarda (1080p, 4K) denendi.
+    Panel artik "onizlemede kontrol et" der; dugme "Object Mask takibini uygula".
+  - Yeni "Takip araligi" satiri: takip klibin hangi karelerini kapsiyor? Kirpilmis / ortadan baslatilmis takipte
+    "ilk N kare takip disi" uyarisi verir (o karelerde hareket ilk/son bilinen konumda sabit kalir).
+  - Durum paneli ve bilgi kutusu sadelestirildi. Diagnostics'e "Takip araligi" eklendi.
+
+  - Duzeltme: Yazi / grafik hedefinde "Ustune tasi" modunda yazi nesnenin soluna/saga kayiyordu (yazinin kendi konumu
+    kare merkezinde degil). Artik yazinin kendi konumu telafi edilir (Ayarlar > Konum > "Yaziyi nesnenin tam ustune oturt").
+  - Yumusatma: baslangic / bitis kaymasi giderildi; Object Mask takibi uygulanirken yumusatma 0 ise 4 yapilir.
+  - Kaynak boyutu sekanstan farkliysa "Scale to Frame Size" ipucu verilir (hareket hizi bu yuzden kayabilir).
+
+v1.9.2: PRMF zaman tabani duzeltildi
+  - .prmf icindeki tick'ler KAYNAK MEDYA zamanidir (klip InPoint'ine gore degil). Kirpilmis klipte (InPoint 50 kare, takip 10 kare sonra baslatildi)
+    ilk tick 60 kare, son tick 205 kare cikti. v1.9.1 InPoint'i bir kez daha ekliyordu; InPoint'i 0 olmayan kliplerde kayma yapardi. Duzeltildi.
+  - Hala varsayim: koordinat orijini sol-ust, nokta = nesne kutusunun merkezi. Bu yuzden "dogrulanmadi" etiketi ve onizleme kontrolu duruyor.
+
+v1.9.1: Object Mask PRMF cozucusu (ters muhendislik ile dogrulanan kisim)
+  - Premiere'in Object Mask .prmf dosyasi (surum 3) cozuldu: dosyanin SONUNDAKI duz (sifresiz) FlatBuffers dizini her kare icin
+    nesnenin bbox'ini (x,y,w,h, piksel), kare boyutunu ve zamani (Premiere tick) tutuyor. Tether bbox MERKEZINI takip noktasi yapar
+    ve mevcut hatta (smooth / despike / deadzone / zoom / keyframe azaltma) baglar. Chunk govdeleri (maske bitmap) sikistirilmis /
+    sifreli gorunuyor, COZULMEDI ve gerekmiyor. Boyut (scale) bilgisi bu dizinden alinmaz; "Nesne boyutunu takip et" bu veride calismaz.
+  - Yine de DOGRULANMADI isaretlidir: zaman sifiri = klibin In noktasi, piksel orijini = sol-ust VARSAYIMDIR (belgelenmemis).
+    "Dogrulanmamis veriyi kullan"a basmadan kullanilmaz; onizlemede hareketin nesneyi izledigini kontrol et.
+  - Dizin butunlugu kontrol edilir (kayitlar chunk bolgesini bosluksuz kaplamali, bbox kare icinde, zamanlar tekil). Gecmezse veri uretilmez.
+  - Durum panelinde Maske / Veri (PRMF) / Takip ayri gosterilir. Ayni dosya her analizde yeniden cozulmez (boyut+tarih onbellegi).
+  - Birden cok PRMF bulunursa en cok kare veren secilir (1 karelik referans dosyasi atlanir).
+
+v1.9: Object Mask katmani + durum paneli
+  - "Analiz et" (eski "Seçili klibi al"): asamalari gosterir (klip > maske algilama > takip verisi > keyframe isleme).
+  - Durum paneli: Kaynak / Maske / Durum / Keyframe / Sure / Takip kalitesi (Iyi - Uyari - Sorun).
+  - Maske durumlari ayri gosterilir: Normal Mask, Object Mask (projede veri var), Object Mask (veri projede yok),
+    takipsiz maske, maske yok, Premiere API siniri. Pen/Ellipse AYRIMI yalnizca projede kanit varsa yazilir.
+  - Object Mask: veri projede degilse GUID'ler once onbellekte, sonra proje klasorunde, sonra Adobe klasorlerinde aranir.
+    Bulunan dosyanin bicimi taninirsa nokta listesi mevcut hatta (smooth/despike/deadzone/zoom) baglanir, ama
+    DOGRULANMADI olarak isaretlenir ve sen "Doğrulanmamış veriyi kullan"a basmadan kullanilmaz.
+    Bicim taninmazsa hicbir veri uretilmez; masaustune tether_objectmask_rapor.txt yazilir.
+  - Diagnostics (Takip sekmesinde kapali bolum): Premiere surumu, eklenti surumu, proje, sequence, klip, maske turu,
+    Object Mask GUID, dosya, cozucu durumu. Kopyala + rapor dugmeleri.
+  - Hatalar kaynagiyla gosterilir (Sequence yok, klip secilmedi, maske yok, Object Mask verisi yok, dosya bulunamadi,
+    bicim desteklenmiyor, API siniri, ayristirma hatasi); teknik ayrinti "Details" altinda.
+  - Takip kalitesi: tek karelik sicrama, ani X/Y ve olcek degisimi, mukerrer / cok yakin keyframe, bosluk,
+    donmus takip, kadraj disi. Sadece olcer; veriyi degistirmez.
+  - Araclar: "Object Mask verisini ara (derin)" artik bulunan dosyalarin bicimini de analiz eder; onbellegi temizle dugmesi.
+
+v1.8: Zoom / Scale secimi (Kadraj takibi):
+  - Otomatik: Scale + Position  -> Scale her kare keyframelenir. "Nesne boyutunu takip et" aciksa nesne
+    kuculdukce (uzaklasinca) zoom artar, buyudukce azalir (guc %70 varsayilan). Kenara yaklasinca
+    kenarda bosluk kalmamasi icin gereken zoom da uygulanir. v1.7'de zoom yalniz kenara gore
+    hesaplandigi icin ilk yarida keyframe vardi, nesne ortaya gelince Scale duz kaliyordu.
+  - Sabit zoom: tek Scale degeri, yalniz Position keyframelenir.
+  - Yalniz Position: Scale'e hic dokunulmaz (klibin mevcut Scale'i kullanilir).
+  - Scale keyframe toleransi inceltildi (daha akici).
+
+v1.7.1: Keyframe yazildiktan sonra Program monitoru artik kendiliginden yenilenir (oynatma basligini
+  bir kare ileri-geri oynatip ayni yere birakir). Oynatma basligini elle oynatmak gerekmez.
+
+YENI (v1.7)
+  - Dinamik zoom (Kadraj takibi): Position'in yaninda Scale de keyframelenir. Nesne kenara gidince zoom
+    otomatik artar, geri gelince duser; kamera nesneye hep yetisir. Eski sabit zoom, nesne kenara
+    yaklasinca kamerayi durdurur ("Motion'da yavas kaliyor" sorununun asil nedeni buydu).
+    "En cok zoom" siniri goruntu bozulmasin diye asiri zoom'u keser.
+  - Canli uygula (onizleme ustunde anahtar): onizlemede bir seyi birakinca / ayar degisince sonuc
+    otomatik Premiere'e yazilir. Deneme-yanilma icin Uygula'ya basmak gerekmez. Yanlissa Geri al.
+  - Geri al ve Anim. sifirla artik altta, her zaman gorunur. Araclar sekmesinden kalktilar.
+  - "Konumu sifirla" dugmesi (onizleme altinda) ya da onizlemeye cift tikla: surukleyerek yaptigin
+    uzaklik / kadraj noktasi ayarini varsayilana dondurur.
+  - Duzeltilen hatalar:
+      * Ust uste Uygula, Geri al yedegini eziyordu; artik Geri al hep Tether oncesi ilk haline doner.
+      * Tether animasyon yazdiktan sonra ayni klip yeniden secilince ilk keyframe degeri "asil deger"
+        sanilip ofset kayiyordu ve Sifirla yanlis konuma donuyordu; artik asil deger korunur.
+      * Geri al klibin kendi Scale animasyonunu da geri yazar.
+  - Araclar > "Ham takip verisi (CSV)": tracker'in her kare sakladigi tum degerleri yazar. Olcek /
+    donme takibi icin gerekli sutunlari bulmakta kullanilacak.
+
+MODLAR
+  Takip et        Hedef yerinde kalir, nesnenin hareketini izler (ofset verilebilir)
+  Ustune tasi     Hedefi nesnenin ustune koyar ve izletir
+  Sabitle         Nesne sabit kalsin diye hareketi tersine uygular
+  Kadraj takibi   Yakinlastirir, nesneyi kadrajda tutar (ayni klip; dinamik zoom, olu bolge)
+
+DESTEKLENEN MASKELER
+  Ellipse / Rectangle / Pen mask + Tracker (ileri takip).  Proje kaydedilmis olmali.
+  Object Mask (yapay zeka): veri proje disinda .prmf dosyasinda; v1.9.1 bbox merkezini okur (DOGRULANMADI isaretli, yukarida).
+  PRMF okunamazsa: ayni nesne icin Ellipse ya da Pen mask ciz ve Tracker ile takip ettir.
+
+SORUN GIDERME (Araclar sekmesi)
+  Proje taramasi / Canli teshis / Debug dosyasi  -> masaustune tether_*.txt yazar.
+
+BILINEN SINIRLAR
+  - Premiere'in iclerinde otomatik test edilemedi; mantik sahte Premiere + sentetik proje ile test edildi.
+  - Arayuz koyu temaya gore tasarlandi.
+  - Keyframe interpolasyonu dogrusal.
