@@ -8,6 +8,8 @@ Premiere Pro'da bir nesneyi (yüz, kafa, top, çizgi film karakteri…) kare kar
 3. Güven grafiğinde sarı/kırmızı karelere git, kutuyu nesneye çek, **Buradan ileri / geri takip**. Düzelttiğin kareler çapa olur, yeniden takip bir sonraki çapada durur.
 4. Hedef klibi seç, modu seç, **Uygula**.
 
+Önizleme ve "Kare al" görüntüsü yakınlaştırılabilir (+ / − düğmeleri, fare tekerleği; kaydırma: orta/sağ tuş ya da Boşluk+sürükle). Fare imleci gibi küçük nesneler için Yöntem > **İmleç / küçük nesne** (yerel çözünürlükte, arka plandan ayırarak izler).
+
 ## Kurulum
 Windows: `kur.bat`, Mac: `kur.command` dosyasını çalıştır. Premiere'i yeniden aç: Window > Extensions > Tether.
 

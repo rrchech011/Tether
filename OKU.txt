@@ -1,4 +1,4 @@
-TETHER  v2.12.3
+TETHER  v2.13.1
 ==============
 Premiere Pro paneli: videodaki bir nesneyi (yuz, kafa, top...) kare kare izler ve
 hedef klibin Position / Scale / Rotation animasyonuna cevirir (After Effects tarzi takip).
@@ -16,6 +16,20 @@ KULLANIM (Takip sekmesi)
   Onizleme ustte: ayar degistikce canli guncellenir; kare kaydirici, oynat, ve onizlemede
   surukleyerek hedef konumu / kadraj konumu ayarlanir. Alttaki tutacla boyutu degistir
   (cift tikla: kucult/buyut).
+
+v2.13.1:
+  - YENI: "Kare al" goruntusunde yakinlastirma / uzaklastirma (kutu cizdigin kare). + / - dugmeleri, fare tekerlegi (imlecin altina dogru), "%" dugmesi sigdirir.
+    Kaydirma: orta / sag tus ya da Bosluk + surukle. Yakinlasmisken cok dar kutu cizebilirsin (imlec gibi kucuk nesneler icin).
+  - DUZELTME: "Imlec / kucuk nesne" yontemi artik duz tek renkli imlecte hata vermez (iki farkli maske + yedek sablon), kisa kliplerde (35 kare) calisir,
+    ikonlarin / dosyalarin ustunden gecince, hareketli veya kayan arka planda tutunur. Nesne gizlenir / arkaya girerse o kareler BOS kalir (sahte veri yok).
+    Bilinen sinir: arka planda cok kontrastli hizli hareket eden desenler (agir cizgi / seritler) zor; bu durumda kareler bos kalir, "Buradan ileri takip" kullan.
+  - YENI: Onizleme yakinlastirma / uzaklastirma. + / - dugmeleri ya da fare tekerlegi (imlecin altindaki noktaya dogru), "100%" dugmesi sigdirir.
+    Kaydirma: orta / sag tus ya da Bosluk + surukle. Sol tus eskisi gibi konum ayari icin. Takip ve hesaplara dokunmaz, yalniz goruntu.
+  - YENI: Yontem > "Imlec / kucuk nesne (ekran kaydi)". Fare imleci gibi 10-20 px'lik nesneler icin. Kutudaki nesnenin siluetini arka plandan ayirir
+    (arka plan kutuya girmez), kareleri YEREL cozunurlukte parca parca okur (bellek uzunluktan bagimsiz), yalniz nesne pikselleriyle eslestirir.
+    Imlec gizlenirse / kaybolursa o kareler BOS kalir (sahte konum uretmez). Olcum (1080p sentetik ekran kaydi, 8 sn): 240/240 kare, 0-0.5 px hata;
+    imlec gizliyken 0 yanlis kare; agir sikistirmada 239/240. Sinir: imlec sekli degisirse (ok -> el / I) o kareler bos kalir, "Buradan ileri takip" kullan.
+  - Diger yontemlerin kodu degismedi (Otomatik / Nokta / Sablon ayni sonucu verir).
 
 v2.12.3:
   - Yalniz metin degisikligi: arayuzde ve mesajlarda "maskeli klip / takipli maske" ifadeleri kaldirildi (takip edilecek klip, hedef klip). Islevlere dokunulmadi.

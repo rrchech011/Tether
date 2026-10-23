@@ -423,6 +423,310 @@
     return { frames: out, lostFwd: rf.lost, lostBwd: rb.lost, reasonFwd: rf.reason, reasonBwd: rb.reason, refIdx: refIdx, w: w, h: h, stats: stats, cuts: cutList };
   }
 
+  /* ---------------- kucuk nesne / imlec (sabit arka planli ekran kaydi) ----------------
+   * Kutudaki nesnenin siluetini, nesnenin uzaklastigi karelerden cikarilan arka planla farkindan bulur (maske).
+   * Sonra YALNIZ maske pikselleriyle maskeli ZNCC esleme yapar: arka plan eslemeye karismaz, imlec metnin / beyaz yuzeyin /
+   * baska pencerenin ustunden gecse de skor dusmez. Kutu nesneden buyuk cizilmis olabilir.
+   * Imlec gibi 10-20 px'lik nesneler kucultulmus karede (640-960 px) ayirt edilemez; bu yuzden bu yontem karelerin TAMAMINI
+   * bellege koymaz: yerel cozunurlukte parca parca (48 kare) okur, eslemeyi yapar, parcayi birakir. Bellek uzunluktan bagimsizdir.
+   * Veri uydurmaz: nesne arka plandan ayrilamazsa ya da kayip olursa kare BOS kalir, neden soylenir. Yalniz konum izler (olcek 1, donme 0). */
+  function smallBox(rect, w, h) {
+    var x0 = Math.max(0, Math.floor(rect[0] * w)), y0 = Math.max(0, Math.floor(rect[1] * h)), x1 = Math.min(w, Math.ceil((rect[0] + rect[2]) * w)), y1 = Math.min(h, Math.ceil((rect[1] + rect[3]) * h));
+    return { x0: x0, y0: y0, bw: x1 - x0, bh: y1 - y0 };
+  }
+  function smallBuild(patches, B, refIdx) {              // patches[j]: j. karenin kutu bolgesi (bw*bh bayt)
+    var bw = B.bw, bh = B.bh, n = bw * bh, R = new Float32Array(n), ref = patches[refIdx], x, y, j, k, p, N = patches.length;
+    if (!ref || bw < 6 || bh < 6) return { err: 'kutu çok küçük ya da kare okunamadı' };
+    for (p = 0; p < n; p++) R[p] = ref[p];
+    var cnt = [];                                       // her karede kutu icinde ref'ten belirgin farkli piksel sayisi
+    for (j = 0; j < N; j++) {
+      var pj = patches[j], c = 0; if (!pj || j === refIdx) { cnt.push(0); continue; }
+      for (p = 0; p < n; p++) if (Math.abs(pj[p] - R[p]) > 40) c++;
+      cnt.push(c);
+    }
+    var minC = Math.max(6, Math.round(n * 0.01)), F0 = [];
+    for (j = 0; j < N; j++) if (cnt[j] >= minC) F0.push(j);
+    if (F0.length < 4) return { err: 'kutunun içi videoda neredeyse hiç değişmiyor: nesne kıpırdamıyor ya da kutuya girmiyor. Nesnenin hareket ettiği bir bölümde "Kare al" yap.' };
+    function medPatch(list) {                          // piksel basina medyan (en cok 41 kare)
+      var step = Math.max(1, Math.floor(list.length / 41)), sel = [], out = new Float32Array(n), v = [], kk, pp;
+      for (kk = 0; kk < list.length; kk += step) sel.push(list[kk]);
+      for (pp = 0; pp < n; pp++) { v.length = 0; for (kk = 0; kk < sel.length; kk++) v.push(patches[sel[kk]][pp]); v.sort(function (a, b) { return a - b; }); out[pp] = v[v.length >> 1]; }
+      return out;
+    }
+    function silhouette(bg) {                          // |ref - arka plan| buyuk olan pikseller; en buyuk bagli parca; ici dolu
+      var M = new Uint8Array(n), q, lab = new Int32Array(n), best = 0, bestId = 0, id = 0, st, a, nb, dx, dy, xx, yy;
+      for (q = 0; q < n; q++) M[q] = Math.abs(R[q] - bg[q]) > 28 ? 1 : 0;
+      for (q = 0; q < n; q++) {
+        if (!M[q] || lab[q]) continue; id++; st = [q]; lab[q] = id; var sz = 0;
+        while (st.length) { a = st.pop(); sz++; yy = (a / bw) | 0; xx = a - yy * bw;
+          for (dy = -1; dy <= 1; dy++) for (dx = -1; dx <= 1; dx++) { var ax = xx + dx, ay = yy + dy; if (ax < 0 || ay < 0 || ax >= bw || ay >= bh) continue; nb = ay * bw + ax; if (M[nb] && !lab[nb]) { lab[nb] = id; st.push(nb); } } }
+        if (sz > best) { best = sz; bestId = id; }
+      }
+      var O = new Uint8Array(n); for (q = 0; q < n; q++) O[q] = lab[q] === bestId && bestId ? 1 : 0;
+      var out = new Uint8Array(n), stk = [];             // kenardan ulasilamayan bosluklar = nesnenin ici
+      function seed(ax, ay) { var z = ay * bw + ax; if (!O[z] && !out[z]) { out[z] = 1; stk.push(z); } }
+      for (xx = 0; xx < bw; xx++) { seed(xx, 0); seed(xx, bh - 1); } for (yy = 0; yy < bh; yy++) { seed(0, yy); seed(bw - 1, yy); }
+      while (stk.length) { a = stk.pop(); yy = (a / bw) | 0; xx = a - yy * bw; if (xx > 0) seed(xx - 1, yy); if (xx < bw - 1) seed(xx + 1, yy); if (yy > 0) seed(xx, yy - 1); if (yy < bh - 1) seed(xx, yy + 1); }
+      for (q = 0; q < n; q++) O[q] = out[q] ? 0 : 1;
+      return O;
+    }
+    var bg = medPatch(F0), M = silhouette(bg), it;
+    for (it = 0; it < 2; it++) {                       // maske temizse nesnenin SILUET YERINDE olmadigi kareleri bul, arka plani onlardan yeniden kur
+      var Lm0 = []; for (p = 0; p < n; p++) if (M[p]) Lm0.push(p);
+      if (Lm0.length < 12) break;
+      var F1 = [];
+      for (j = 0; j < N; j++) {
+        var pq = patches[j]; if (!pq || j === refIdx) continue; var d = 0;
+        for (k = 0; k < Lm0.length; k++) d += Math.abs(pq[Lm0[k]] - bg[Lm0[k]]);
+        if (d / Lm0.length < 14) F1.push(j);
+      }
+      if (F1.length < 4) break;
+      bg = medPatch(F1); M = silhouette(bg);
+    }
+    var T0 = smallTemplate(R, M, B, n); if (!T0.err) T0.bgFrames = F0.length; return T0;
+  }
+  /* Maske M (0/1, bw*bh) + referans parca R -> eslesme sablonu. Maske duzse (tek renk) 2 px genisletilir; yine duzse hata. */
+  function smallTemplate(R, M, B, n) {
+    var bw = B.bw, bh = B.bh, k;
+    function dilate(A) { var O2 = new Uint8Array(n), q, a2, b2, dx2, dy2; for (q = 0; q < n; q++) if (A[q]) { a2 = (q / bw) | 0; b2 = q - a2 * bw; for (dy2 = -2; dy2 <= 2; dy2++) for (dx2 = -2; dx2 <= 2; dx2++) { var X = b2 + dx2, Y = a2 + dy2; if (X >= 0 && Y >= 0 && X < bw && Y < bh) O2[Y * bw + X] = 1; } } return O2; }
+    function pix(A) { var L = []; for (var q = 0; q < n; q++) if (A[q]) L.push(q); return L; }
+    function sd(L) { var m = 0, v = 0, q; for (q = 0; q < L.length; q++) m += R[L[q]]; m /= L.length; for (q = 0; q < L.length; q++) v += (R[L[q]] - m) * (R[L[q]] - m); return Math.sqrt(v / L.length); }
+    var Lm = pix(M);
+    if (Lm.length < 12) return { err: 'kutudaki nesne arka plandan ayrılamadı (siluet çok küçük). Kutuyu imleci tam içine alacak şekilde, daha sıkı çiz.' };
+    if (sd(Lm) < 6) return smallBlob(R, M, Lm, B, n, dilate);     // tek renk leke (ornegin koyu zeminde yalniz beyaz dolgu): ZNCC tanimsiz, merkez-cevre karsitligi kullan
+    var cenX = bw >> 1, cenY = bh >> 1, m = Lm.length, dxs = new Int32Array(m), dys = new Int32Array(m), tz = new Float32Array(m), mt = 0, vt = 0;
+    for (k = 0; k < m; k++) { var yq = (Lm[k] / bw) | 0, xq = Lm[k] - yq * bw; dxs[k] = xq - cenX; dys[k] = yq - cenY; tz[k] = R[Lm[k]]; mt += tz[k]; }
+    mt /= m; for (k = 0; k < m; k++) { tz[k] -= mt; vt += tz[k] * tz[k]; }
+    var ex = 0, ey = 0; for (k = 0; k < m; k++) { ex = Math.max(ex, Math.abs(dxs[k])); ey = Math.max(ey, Math.abs(dys[k])); }
+    return { dx: dxs, dy: dys, tz: tz, m: m, vt: vt, ex: ex, ey: ey, px0: B.x0 + cenX, py0: B.y0 + cenY, ofx: bw / 2 - cenX, ofy: bh / 2 - cenY, bw: bw, bh: bh, frac: m / n };
+  }
+  /* Tek renkli (duz) siluet: sekil = maske pikselleri hep ayni parlaklikta, cevresindeki 1-2 px'lik halka belirgin farkli. Skor = (ic ortalama - halka ortalamasi) / referanstaki fark x
+   * (ic piksellerin ref ortalamasina +-45 icinde kalan orani). Arka plan hareketli de olsa halka yalniz gurultu ekler. */
+  function smallBlob(R, M, Lm, B, n, dilate) {
+    var bw = B.bw, bh = B.bh, k, q, mi = 0, D = dilate(M), ring = [];
+    for (k = 0; k < Lm.length; k++) mi += R[Lm[k]]; mi /= Lm.length;
+    for (q = 0; q < n; q++) if (D[q] && !M[q]) ring.push(q);
+    if (ring.length < 8) return { err: 'nesne kutuyu dolduruyor, çevresinde arka plan göremedim; kutuyu nesneden biraz büyük çiz.' };
+    var mr = 0; for (k = 0; k < ring.length; k++) mr += R[ring[k]]; mr /= ring.length;
+    var span = mi - mr; if (Math.abs(span) < 60) return { err: 'nesne düz tek renk ve arka plandan yeterince ayrışmıyor.' };
+    var cenX = bw >> 1, cenY = bh >> 1, m = Lm.length, dxs = new Int32Array(m), dys = new Int32Array(m), rdx = new Int32Array(ring.length), rdy = new Int32Array(ring.length), ex = 0, ey = 0;
+    for (k = 0; k < m; k++) { var yq = (Lm[k] / bw) | 0, xq = Lm[k] - yq * bw; dxs[k] = xq - cenX; dys[k] = yq - cenY; ex = Math.max(ex, Math.abs(dxs[k])); ey = Math.max(ey, Math.abs(dys[k])); }
+    for (k = 0; k < ring.length; k++) { var yr = (ring[k] / bw) | 0, xr = ring[k] - yr * bw; rdx[k] = xr - cenX; rdy[k] = yr - cenY; ex = Math.max(ex, Math.abs(rdx[k])); ey = Math.max(ey, Math.abs(rdy[k])); }
+    return { blob: true, dx: dxs, dy: dys, rdx: rdx, rdy: rdy, rm: ring.length, mean: mi, span: span, m: m, ex: ex, ey: ey, px0: B.x0 + cenX, py0: B.y0 + cenY, ofx: bw / 2 - cenX, ofy: bh / 2 - cenY, bw: bw, bh: bh, frac: m / n };
+  }
+  /* Arka plandan bagimsiz maske: parcadaki cok parlak (>=205) ve cok koyu (<=50) pikseller; kutunun ortasina en cok oturan bagli parca(lar). Imlec = beyaz dolgu + siyah kontur.
+   * Arka plan hareketli / klip kisa / imlec kipirdamiyorsa bile calisir. Koyu masaustunde yalniz beyaz dolgu, beyaz pencerede yalniz siyah kontur kalir. */
+  function smallBuildExtreme(R, B) {
+    var bw = B.bw, bh = B.bh, n = bw * bh, p, cx = bw / 2, cy = bh / 2, rc = 0.3 * Math.min(bw, bh);
+    if (bw < 6 || bh < 6) return { err: 'kutu çok küçük' };
+    function comps(bin) {
+      var lab = new Int32Array(n), out = [], id = 0, q, st, a, xx, yy, dx, dy, nb;
+      for (q = 0; q < n; q++) {
+        if (!bin[q] || lab[q]) continue; id++; st = [q]; lab[q] = id; var px = [];
+        while (st.length) { a = st.pop(); px.push(a); yy = (a / bw) | 0; xx = a - yy * bw;
+          for (dy = -1; dy <= 1; dy++) for (dx = -1; dx <= 1; dx++) { var ax = xx + dx, ay = yy + dy; if (ax < 0 || ay < 0 || ax >= bw || ay >= bh) continue; nb = ay * bw + ax; if (bin[nb] && !lab[nb]) { lab[nb] = id; st.push(nb); } } }
+        out.push(px);
+      }
+      return out;
+    }
+    function pick(bin) {                                // kutu merkezine en cok oturan, makul buyuklukte parca
+      var best = null, bs = 0, cs = comps(bin), i, j;
+      for (i = 0; i < cs.length; i++) {
+        if (cs[i].length < 15 || cs[i].length > 0.35 * n) continue; var ins = 0;
+        for (j = 0; j < cs[i].length; j++) { var yy = (cs[i][j] / bw) | 0, xx = cs[i][j] - yy * bw; if (Math.hypot(xx - cx, yy - cy) <= rc) ins++; }
+        var sc = ins + cs[i].length * 0.01; if (ins > 0 && sc > bs) { bs = sc; best = cs[i]; }
+      }
+      return best;
+    }
+    var bright = new Uint8Array(n), dark = new Uint8Array(n), nd = 0;
+    for (p = 0; p < n; p++) { if (R[p] >= 205) bright[p] = 1; if (R[p] <= 50) { dark[p] = 1; nd++; } }
+    var cb = pick(bright), cd = nd < 0.3 * n ? pick(dark) : null;     // koyu piksel cogunluktaysa (koyu masaustu) siyah konturu secme
+    if (!cb && !cd) return { err: 'kutuda imleç benzeri (parlak / koyu, belirgin) bir şekil bulunamadı.' };
+    var M = new Uint8Array(n), i;
+    if (cb) for (i = 0; i < cb.length; i++) M[cb[i]] = 1;
+    if (cd) for (i = 0; i < cd.length; i++) M[cd[i]] = 1;
+    var out = new Uint8Array(n), stk = [], a, xx, yy;     // kapali konturun ici (delikler) dolsun
+    function seed(ax, ay) { var z = ay * bw + ax; if (!M[z] && !out[z]) { out[z] = 1; stk.push(z); } }
+    for (xx = 0; xx < bw; xx++) { seed(xx, 0); seed(xx, bh - 1); } for (yy = 0; yy < bh; yy++) { seed(0, yy); seed(bw - 1, yy); }
+    while (stk.length) { a = stk.pop(); yy = (a / bw) | 0; xx = a - yy * bw; if (xx > 0) seed(xx - 1, yy); if (xx < bw - 1) seed(xx + 1, yy); if (yy > 0) seed(xx, yy - 1); if (yy < bh - 1) seed(xx, yy + 1); }
+    for (p = 0; p < n; p++) M[p] = out[p] ? 0 : 1;
+    return smallTemplate(R, M, B, n);
+  }
+  function smallMatch(img, w, T, off, cx, cy) {          // (cx,cy) = kutu merkezi (tam sayi). Duz sablon: merkez-cevre karsitligi; degilse maskeli ZNCC
+    var m = T.m, base = cy * w + cx, k, v;
+    if (T.blob) {
+      var sI = 0, sR = 0, ok = 0, ro = T.roff, rm = T.rm, mean = T.mean;
+      for (k = 0; k < m; k++) { v = img[base + off[k]]; sI += v; if (v > mean - 45 && v < mean + 45) ok++; }
+      for (k = 0; k < rm; k++) sR += img[base + ro[k]];
+      var c = (sI / m - sR / rm) / T.span; if (c <= 0) return 0; if (c > 1) c = 1; return c * (ok / m);
+    }
+    var tz = T.tz, sI2 = 0, sII = 0, sIT = 0;
+    for (k = 0; k < m; k++) { v = img[base + off[k]]; sI2 += v; sII += v * v; sIT += v * tz[k]; }
+    var vI = sII - sI2 * sI2 / m; if (vI < 1e-3 * m) return -1;
+    return sIT / Math.sqrt(vI * T.vt);
+  }
+  function smallFind(img, w, h, T, off, px, py, r, step) {
+    var best = -2, bx = px, by = py, cx, cy, s, x0 = Math.max(T.ex, px - r), x1 = Math.min(w - 1 - T.ex, px + r), y0 = Math.max(T.ey, py - r), y1 = Math.min(h - 1 - T.ey, py + r);
+    for (cy = y0; cy <= y1; cy += step) for (cx = x0; cx <= x1; cx += step) { s = smallMatch(img, w, T, off, cx, cy); if (s > best) { best = s; bx = cx; by = cy; } }
+    if (step > 1 && best > -2) {                          // ince: en iyinin cevresinde tek piksel adimla
+      var rx0 = Math.max(T.ex, bx - step + 1), rx1 = Math.min(w - 1 - T.ex, bx + step - 1), ry0 = Math.max(T.ey, by - step + 1), ry1 = Math.min(h - 1 - T.ey, by + step - 1), ox = bx, oy = by;
+      for (cy = ry0; cy <= ry1; cy++) for (cx = rx0; cx <= rx1; cx++) { s = smallMatch(img, w, T, off, cx, cy); if (s > best) { best = s; ox = cx; oy = cy; } }
+      bx = ox; by = oy;
+    }
+    return { s: best, x: bx, y: by };
+  }
+  function smallPeaks(img, w, h, T, off, S, offS, px, py, r) {   // S: alt-maske (her 4. piksel). Tum konumlar adim 1 (tepe ~1 px genisliginde); en iyi 8 aday tam maskeyle sinanir, skora gore sirali
+    var x0 = Math.max(T.ex, px - r), x1 = Math.min(w - 1 - T.ex, px + r), y0 = Math.max(T.ey, py - r), y1 = Math.min(h - 1 - T.ey, py + r), top = [], cx, cy, s, i, mn = -2, mi = -1;
+    function rescan() { mn = 9; mi = -1; for (var t = 0; t < top.length; t++) if (top[t].s < mn) { mn = top[t].s; mi = t; } }
+    for (cy = y0; cy <= y1; cy++) for (cx = x0; cx <= x1; cx++) {
+      s = smallMatch(img, w, S, offS, cx, cy); if (top.length >= 8 && s <= mn) continue;
+      var near = -1; for (i = 0; i < top.length; i++) if (Math.abs(top[i].x - cx) < 4 && Math.abs(top[i].y - cy) < 4) { near = i; break; }
+      if (near >= 0) { if (s > top[near].s) { top[near] = { s: s, x: cx, y: cy }; rescan(); } }
+      else if (top.length < 8) { top.push({ s: s, x: cx, y: cy }); rescan(); }
+      else { top[mi] = { s: s, x: cx, y: cy }; rescan(); }
+    }
+    var res = [];
+    for (i = 0; i < top.length; i++) {
+      var best = { s: -2, x: top[i].x, y: top[i].y };
+      for (cy = top[i].y - 1; cy <= top[i].y + 1; cy++) for (cx = top[i].x - 1; cx <= top[i].x + 1; cx++) {
+        if (cx < T.ex || cy < T.ey || cx > w - 1 - T.ex || cy > h - 1 - T.ey) continue; s = smallMatch(img, w, T, off, cx, cy); if (s > best.s) best = { s: s, x: cx, y: cy };
+      }
+      res.push(best);
+    }
+    res.sort(function (a, b) { return b.s - a.s; });
+    return res;
+  }
+  function smallFindWide(img, w, h, T, off, S, offS, px, py, r) { var p = smallPeaks(img, w, h, T, off, S, offS, px, py, r); return p.length ? p[0] : { s: -2, x: px, y: py }; }
+  /* Jenerator: her karenin basinda `yield i` (surucu o kareyi bellege getirir), sonra esler. getFrame(i) -> Uint8Array | null */
+  function* smallGen(getFrame, total, w, h, refIdx, T, opts) {
+    var out = new Array(total), stats = { coasts: 0, lkLost: 0, lowApp: 0, resumes: 0, reacqs: 0, small: 1 }, done = 0;
+    if (opts.shared) opts.shared.out = out;
+    var off = new Int32Array(T.m), q; for (q = 0; q < T.m; q++) off[q] = T.dy[q] * w + T.dx[q];
+    var sm = Math.ceil(T.m / 4), S = { m: sm, ex: T.ex, ey: T.ey }, offS = new Int32Array(sm), sMean = 0;   // alt-maske: her 4. piksel (genis aramada hiz)
+    for (q = 0; q < sm; q++) offS[q] = off[q * 4];
+    if (T.blob) {
+      T.roff = new Int32Array(T.rm); for (q = 0; q < T.rm; q++) T.roff[q] = T.rdy[q] * w + T.rdx[q];
+      var rs = Math.ceil(T.rm / 3); S.blob = true; S.rm = rs; S.roff = new Int32Array(rs); S.mean = T.mean; S.span = T.span; for (q = 0; q < rs; q++) S.roff[q] = T.roff[q * 3];
+    } else {
+      S.tz = new Float32Array(sm); S.vt = 0; for (q = 0; q < sm; q++) { S.tz[q] = T.tz[q * 4]; sMean += S.tz[q]; } sMean /= sm; for (q = 0; q < sm; q++) { S.tz[q] -= sMean; S.vt += S.tz[q] * S.tz[q]; }
+    }
+    var wideMs = 25000;                                   // genis arama toplam suresi sinirli (uzun kayiplarda sonsuz beklemesin)
+    var D = T.D, smp = opts.samples || [], si; if (D === undefined) { D = 0;      // sablonun arka planda ne kadar benzer yer buldugunu olc: ornek karelerde en iyi eslesmeden >=30 px uzaktaki en iyi aday
+    for (si = 0; si < smp.length; si++) {
+      var pk = smallPeaks(smp[si], w, h, T, off, S, offS, w >> 1, h >> 1, Math.max(w, h)), b0 = pk[0], t2;
+      if (b0) for (t2 = 1; t2 < pk.length; t2++) if (Math.hypot(pk[t2].x - b0.x, pk[t2].y - b0.y) >= 30) { D = Math.max(D, pk[t2].s); break; }
+    } T.D = D; }
+    var tNear = Math.min(0.9, Math.max(0.58, D + 0.06)), tWide = Math.min(0.95, Math.max(0.68, D + 0.1));
+    stats.decoy = +D.toFixed(2); stats.thr = [+tNear.toFixed(2), +tWide.toFixed(2)];
+    var Rmax = Math.max(24, Math.min(0.45 * w, (opts.searchR || 0.12 * w) * (opts.search || 1))), dirs = opts.dir || 'both';
+    function summ(i, cx, cy, s) {
+      var hw = T.bw / 2, hh = T.bh / 2;
+      return { i: i, poly: [[cx - hw, cy - hh], [cx + hw, cy - hh], [cx + hw, cy + hh], [cx - hw, cy + hh]], cx: cx, cy: cy, scale: 1, rot: 0, conf: Math.max(0.05, Math.min(1, (s - 0.3) / 0.5)) };
+    }
+    out[refIdx] = summ(refIdx, T.px0 + T.ofx, T.py0 + T.ofy, 1);
+    function* run(dir) {
+      var px = T.px0, py = T.py0, vx = 0, vy = 0, k = 0, i;
+      for (i = refIdx + dir; i >= 0 && i < total; i += dir) {
+        if (opts.limit && Math.abs(i - refIdx) > opts.limit) break;
+        yield i;
+        var img = getFrame(i);
+        if (!img) { out[i] = null; if (k === 0) stats.coasts++; k++; if (opts.onProgress) opts.onProgress(++done, total - 1); continue; }
+        var sp = Math.hypot(vx, vy), kk = k ? Math.min(k, 3) * 0.5 : 1;
+        var pcx = Math.max(T.ex, Math.min(w - 1 - T.ex, Math.round(px + vx * kk))), pcy = Math.max(T.ey, Math.min(h - 1 - T.ey, Math.round(py + vy * kk)));
+        var thrNear = tNear, thrWide = tWide, f;
+        if (k > 6 && i % (k > 40 ? 15 : 6) !== 0) { out[i] = null; k++; if (opts.onProgress) opts.onProgress(++done, total - 1); continue; }   // uzun kayiplarda her karede tam arama yapma
+        var rN = Math.min(Rmax, Math.ceil(1.5 * sp + 8 + 2 * Math.min(k, 6)));         // 1. asama: tahminin hemen cevresi
+        f = smallFind(img, w, h, T, off, pcx, pcy, rN, 1);
+        var okF = f.s >= thrNear;
+        if (!okF) {                                                                    // 2. asama: biraz genis
+          var r1 = Math.min(Rmax, Math.ceil(2 * sp + 14 + 2 * Math.min(k, 12)), 60), fm = smallFind(img, w, h, T, off, pcx, pcy, r1, 1);
+          if (fm.s > f.s) f = fm; okF = f.s >= thrNear;
+        }
+        if (!okF && T.m >= 12 && wideMs > 0) {                                         // 3. asama: tum cevre
+          var tw0 = Date.now(), r2 = k === 0 ? Rmax : Math.min(0.45 * w, Rmax * (1 + 0.5 * k));
+          var f2 = smallFindWide(img, w, h, T, off, S, offS, pcx, pcy, Math.round(r2)); wideMs -= Date.now() - tw0;
+          if (f2.s >= thrWide) { f = f2; okF = true; } else if (f2.s > f.s) f = f2;
+        }
+        if (okF) {
+          if (k > 0) stats.resumes++;
+          vx = 0.5 * vx + 0.5 * (f.x - px) / (k + 1); vy = 0.5 * vy + 0.5 * (f.y - py) / (k + 1); px = f.x; py = f.y; k = 0;
+          out[i] = summ(i, px + T.ofx, py + T.ofy, f.s);
+        } else { if (k === 0) { stats.coasts++; stats.lkLost++; } k++; vx *= 0.9; vy *= 0.9; out[i] = null; }
+        if (opts.dbg) opts.dbg(i, f.s, f.x, f.y, k);
+        if (opts.onProgress) opts.onProgress(++done, total - 1);
+      }
+      return { lost: null };
+    }
+    var rf = { lost: null }, rb = { lost: null };
+    if (dirs === 'fwd' || dirs === 'both') rf = yield* run(1);
+    if (dirs === 'bwd' || dirs === 'both') rb = yield* run(-1);
+    stats.maskPx = T.m; stats.bgFrames = T.bgFrames;
+    return { frames: out, lostFwd: rf.lost, lostBwd: rb.lost, reasonFwd: rf.reason, reasonBwd: rb.reason, refIdx: refIdx, w: w, h: h, stats: stats, cuts: [] };
+  }
+  /* ffmpeg'ten `count` kareyi (yerel cozunurluk, gri) akit; her kare icin onFrame(i, Uint8Array) cagrilir (kare kopya degil, saklanabilir). */
+  function streamGray(ffmpeg, file, tStart, count, fps, W, H, onFrame, sig) {
+    return new Promise(function (resolve, reject) {
+      var args = ['-v', 'error', '-ss', String(Math.max(0, tStart)), '-i', file, '-frames:v', String(count), '-an', '-vf', 'fps=' + fps + ',scale=' + W + ':' + H + ':flags=area,format=gray', '-f', 'rawvideo', '-pix_fmt', 'gray', '-'];
+      var p = cp.spawn(ffmpeg, args, { windowsHide: true }), size = W * H, cur = Buffer.allocUnsafe(size), fill = 0, idx = 0, err = '';
+      if (sig) sig.kill = function () { try { p.kill(); } catch (e) {} };
+      p.stdout.on('data', function (d) {
+        var pos = 0;
+        while (pos < d.length && idx < count) {
+          var take = Math.min(size - fill, d.length - pos); d.copy(cur, fill, pos, pos + take); fill += take; pos += take;
+          if (fill === size) { onFrame(idx++, new Uint8Array(cur.buffer, cur.byteOffset, size)); cur = Buffer.allocUnsafe(size); fill = 0; }
+        }
+      });
+      p.stderr.on('data', function (d) { err += d.toString(); });
+      p.on('error', function (e) { reject('ffmpeg çalıştırılamadı: ' + e.message); });
+      p.on('close', function () { if (!idx && err) reject('ffmpeg kare üretmedi: ' + err.slice(0, 300)); else resolve(idx); });
+    });
+  }
+  /* Kucuk nesne / imlec izleyici (async). o: { inSec, fps, n (kare sayisi), refIdx, rect [x,y,w,h 0-1], W, H (yerel cozunurluk), dir, searchR (W biriminde px), search, onProgress, cancel, sig }
+   * Sonuc trackRegionAsync ile ayni bicimde; kare konumlari W x H koordinatinda. Kutu icinden nesne ayrilamazsa sonuc.setupError doludur. */
+  async function trackSmall(ffmpeg, file, o) {
+    var n = o.n, W = o.W, H = o.H, B = smallBox(o.rect, W, H), patches = new Array(n), sig = o.sig || {}, tick = Date.now(), samples = [], sEvery = Math.max(1, Math.floor(n / 6));
+    await streamGray(ffmpeg, file, o.inSec, n, o.fps, W, H, function (i, f) {      // 1) arka plan icin yalniz kutu bolgesini topla (kareler saklanmaz)
+      var pt = new Uint8Array(B.bw * B.bh), y; for (y = 0; y < B.bh; y++) pt.set(f.subarray((B.y0 + y) * W + B.x0, (B.y0 + y) * W + B.x0 + B.bw), y * B.bw); patches[i] = pt; if (i % sEvery === 0 && samples.length < 6) samples.push(f);
+    }, sig);
+    if (o.cancel && o.cancel()) return { frames: new Array(n), lostFwd: null, lostBwd: null, cancelled: true, refIdx: o.refIdx, w: W, h: H };
+    var Ta = smallBuild(patches, B, o.refIdx), refP = patches[o.refIdx], Rf = new Float32Array(B.bw * B.bh), qq;
+    if (refP) for (qq = 0; qq < Rf.length; qq++) Rf[qq] = refP[qq];
+    var Tb = refP ? smallBuildExtreme(Rf, B) : { err: 'kare okunamadı' }; patches = null;
+    var cands = []; if (!Ta.err) { Ta.kind = 'arka plan farkı'; cands.push(Ta); } if (!Tb.err) { Tb.kind = 'parlak/koyu şekil'; cands.push(Tb); }
+    if (o.force) cands = cands.filter(function (c) { return o.force === 'ext' ? c === Tb : c === Ta; });
+    if (!cands.length) { var em = Ta.err + ' (' + Tb.err + ')'; return { frames: new Array(n), lostFwd: o.refIdx, lostBwd: o.refIdx, reasonFwd: em, reasonBwd: em, refIdx: o.refIdx, w: W, h: H, stats: { small: 1 }, cuts: [], setupError: em }; }
+    var C = 48, cache = {};
+    async function ensure(i) {                           // i. kareyi iceren parcayi getir (en yakin 2 parca bellekte kalir)
+      var c = Math.floor(i / C); if (cache[c]) return;
+      Object.keys(cache).forEach(function (kc) { if (Math.abs(+kc - c) > 1) delete cache[kc]; });
+      var s0 = c * C, fr = []; await streamGray(ffmpeg, file, o.inSec + s0 / o.fps, Math.min(C, n - s0), o.fps, W, H, function (j, f) { fr.push(f); }, sig); cache[c] = fr;
+    }
+    function getFrame(i) { var c = Math.floor(i / C), fr = cache[c]; return (fr && fr[i - c * C]) || null; }
+    async function runWith(T, limit, onProg) {
+      var opts = { dir: o.dir, searchR: o.searchR, search: o.search || 1, onProgress: onProg, dbg: o.dbg, samples: samples, limit: limit }, shared = {}; opts.shared = shared;
+      var g = smallGen(getFrame, n, W, H, o.refIdx, T, opts), r = g.next();
+      while (!r.done) {                                  // her kare icin gerekirse parca yukle
+        if (o.cancel && o.cancel()) { try { g.return(); } catch (e) {} return { frames: shared.out || [], lostFwd: null, lostBwd: null, cancelled: true, refIdx: o.refIdx, w: W, h: H }; }
+        await ensure(r.value);
+        if (Date.now() - tick > 25) { await new Promise(function (res) { setTimeout(res, 0); }); tick = Date.now(); }
+        r = g.next();
+      }
+      return r.value;
+    }
+    var T = cands[0];
+    if (cands.length > 1) {                              // iki maske de olusturulabildi: ref'ten +-45 karede hangisi daha cok kare izliyor? (esitlikte arka plan farki)
+      var best = -1;
+      for (var ci = 0; ci < cands.length; ci++) {
+        var tr = await runWith(cands[ci], 45, null); if (tr.cancelled) return tr;
+        var okc = tr.frames.filter(Boolean).length, mc = 0, nc = 0; tr.frames.forEach(function (f) { if (f) { mc += f.conf; nc++; } });
+        cands[ci].trial = okc; var margin = okc < 3 ? -9 : (nc ? mc / nc : 0) * Math.min(1, okc / 20);   // ortalama guven x (en az 20 kare izleme)
+        if (margin > best + 0.02) { best = margin; T = cands[ci]; }
+      }
+    }
+    var fin = await runWith(T, 0, o.onProgress); if (fin.stats) { fin.stats.mask = T.kind; fin.stats.trial = cands.map(function (c) { return c.kind + ':' + c.trial; }).join(' '); }
+    return fin;
+  }
+
   /* ---------------- ana izleyici (jenerator: durdurulabilir / ilerleme verir) ---------------- */
   /* frames: gri kareler (Uint8Array[]), w,h. refIdx: bolgenin secildigi kare. rect: [x,y,w,h] (0-1).
    * opts: dir 'fwd'|'bwd'|'both', baseScale/baseRot (onceki sonucun bu karedeki degeri), shared (kismi sonuc icin).
@@ -687,7 +991,7 @@
     return [x0, y0, x1 - x0, y1 - y0];
   }
 
-  var api = { setDebug: function (f) { DBG = f; }, rectHit: rectHit, rectApply: rectApply, findFfmpeg: findFfmpeg, probe: probe, readFrames: readFrames, readOneFramePng: readOneFramePng, trackRegion: trackRegion, trackRegionAsync: trackRegionAsync, mergeResults: mergeResults, fillGaps: fillGaps, detectCuts: detectCuts, toPoints: toPoints, _lk: lkPyr, _pyramid: pyramid };
+  var api = { setDebug: function (f) { DBG = f; }, rectHit: rectHit, rectApply: rectApply, findFfmpeg: findFfmpeg, probe: probe, readFrames: readFrames, readOneFramePng: readOneFramePng, trackRegion: trackRegion, trackRegionAsync: trackRegionAsync, mergeResults: mergeResults, fillGaps: fillGaps, detectCuts: detectCuts, toPoints: toPoints, _lk: lkPyr, _pyramid: pyramid, trackSmall: trackSmall };
   root.TetherTrack = api;   // CEP'te hem 'module' hem 'window' vardir: ikisine de ver
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : this);

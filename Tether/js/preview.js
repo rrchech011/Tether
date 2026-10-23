@@ -6,6 +6,7 @@
   var cv = $('cv'), g = cv.getContext('2d'), wrap = $('pvWrap'), box = $('preview');
   var data = null, L = null, cur = 0, timer = null, drag = false, deb = null;
   var clamp = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
+  var view = { z: 1, px: 0.5, py: 0.5 }, ZMIN = 0.25, ZMAX = 24, spaceDown = false, pan = null;   // yakinlastirma: z (1 = sigdir), (px,py) = tuval merkezindeki kare noktasi (0-1)
   var MIN_SHOW = 40, DEF_H = Math.max(64, Math.min(130, Math.round(window.innerHeight * 0.17)));   // panel boyuna gore
 
   var LEG = {
@@ -16,12 +17,13 @@
   };
 
   function prepare() {
-    var T = window.MT;
+    var T = window.MT, hadData = !!data;
     if (!T || !T.st.src || !T.st.tracks.length) { data = null; return; }
     var r;
     try { r = T.compute(T.previewTarget(), true); } catch (e) { data = null; return; }
     var pts = r.track.points;
     data = { d: MaskParser.previewData(pts, r.o), o: r.o, pts: pts, track: r.track };
+    if (!hadData) { view.z = 1; view.px = 0.5; view.py = 0.5; }
     var sc = $('pvScrub'); sc.max = Math.max(0, pts.length - 1);
     cur = clamp(cur, 0, pts.length - 1); sc.value = cur;
     cv.style.cursor = r.o.mode === 'stabilize' ? 'default' : 'crosshair';
@@ -36,7 +38,9 @@
     var dpr = window.devicePixelRatio || 1;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     var ar = data.o.seqW / data.o.seqH, m = Math.min(14, w * 0.06, h * 0.12), fw = Math.min(w - 2 * m, (h - 2 * m) * ar), fh = fw / ar;
-    L = { w: w, h: h, dpr: dpr, fx: (w - fw) / 2, fy: (h - fh) / 2, fw: fw, fh: fh };
+    var bw0 = fw;                                                          // sigdirilmis genislik; zoom bunun uzerine carpilir
+    fw = bw0 * view.z; fh = fw / ar;
+    L = { w: w, h: h, dpr: dpr, fx: w / 2 - view.px * fw, fy: h / 2 - view.py * fh, fw: fw, fh: fh, bw: bw0 };
     return true;
   }
 
@@ -46,6 +50,7 @@
     if (!data) { $('pvTime').textContent = ''; return; }
     if (!layout()) return;
     var d = data.d, o = data.o, i = cur, n = data.pts.length;
+    $('pvZfit').textContent = Math.round(view.z * 100) + '%';
     var X = function (v) { return L.fx + v * L.fw; }, Y = function (v) { return L.fy + v * L.fh; };
     g.setTransform(L.dpr, 0, 0, L.dpr, 0, 0); g.setLineDash([]);
     g.fillStyle = '#161616'; g.fillRect(0, 0, L.w, L.h);
@@ -108,7 +113,7 @@
     } else return;
     refresh();
   }
-  cv.addEventListener('mousedown', function (e) { if (!data || !L) return; stop(); drag = true; applyDrag(pos(e)); e.preventDefault(); });
+  cv.addEventListener('mousedown', function (e) { if (!data || !L || e.button !== 0 || spaceDown) return; stop(); drag = true; applyDrag(pos(e)); e.preventDefault(); });
   window.addEventListener('mousemove', function (e) { if (drag && data && L) applyDrag(pos(e)); });
   window.addEventListener('mouseup', function () { if (drag) { drag = false; if (window.MT) { window.MT.save(); window.MT.touch(); } } });
 
@@ -130,6 +135,41 @@
     $('pvPlay').textContent = '■';
     timer = setInterval(function () { cur = (cur + 1) % data.pts.length; $('pvScrub').value = cur; render(); }, 40);
   };
+
+  // ---- yakinlastir / uzaklastir (konum ayari ve takip verisine dokunmaz; yalniz goruntu) ----
+  function clampView() {
+    view.z = clamp(view.z, ZMIN, ZMAX); view.px = clamp(view.px, 0, 1); view.py = clamp(view.py, 0, 1);
+  }
+  function zoomAt(f, cx, cy) {                       // (cx,cy): tuval CSS px; o noktanin altindaki kare noktasi sabit kalir
+    if (!data || !L) return;
+    var ar = L.fw / L.fh, u = (cx - L.fx) / L.fw, v = (cy - L.fy) / L.fh, z2 = clamp(view.z * f, ZMIN, ZMAX), fw2 = L.bw * z2, fh2 = fw2 / ar;
+    view.z = z2; view.px = (L.w / 2 - (cx - u * fw2)) / fw2; view.py = (L.h / 2 - (cy - v * fh2)) / fh2;
+    clampView(); render();
+  }
+  function fitView() { view.z = 1; view.px = 0.5; view.py = 0.5; render(); }
+  cv.addEventListener('wheel', function (e) {
+    if (!data || !L) return;
+    var r = cv.getBoundingClientRect(); e.preventDefault();
+    zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  $('pvZin').onclick = function () { if (L) zoomAt(1.5, L.w / 2, L.h / 2); };
+  $('pvZout').onclick = function () { if (L) zoomAt(1 / 1.5, L.w / 2, L.h / 2); };
+  $('pvZfit').onclick = fitView;
+  ['mousedown', 'dblclick'].forEach(function (n) { $('pvZoom').addEventListener(n, function (e) { e.stopPropagation(); }); });
+  // kaydirma: orta / sag tus ya da Bosluk + sol tus (sol tus ofset ayari icin ayrildi)
+  cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  cv.addEventListener('mousedown', function (e) {
+    if (!data || !L || !(e.button === 1 || e.button === 2 || (e.button === 0 && spaceDown))) return;
+    pan = { x: e.clientX, y: e.clientY, px: view.px, py: view.py }; cv.style.cursor = 'grabbing'; e.preventDefault();
+  });
+  window.addEventListener('mousemove', function (e) {
+    if (!pan || !L) return;
+    view.px = pan.px - (e.clientX - pan.x) / L.fw; view.py = pan.py - (e.clientY - pan.y) / L.fh; clampView(); render();
+  });
+  window.addEventListener('mouseup', function () { if (pan) { pan = null; cv.style.cursor = spaceDown ? 'grab' : (data && data.o.mode === 'stabilize' ? 'default' : 'crosshair'); } });
+  function typing(e) { var t = e.target && e.target.tagName; return t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA'; }
+  window.addEventListener('keydown', function (e) { if (e.key === ' ' && !typing(e) && data && !spaceDown) { spaceDown = true; if (!pan) cv.style.cursor = 'grab'; e.preventDefault(); } });
+  window.addEventListener('keyup', function (e) { if (e.key === ' ' && spaceDown) { spaceDown = false; if (!pan) cv.style.cursor = data && data.o.mode === 'stabilize' ? 'default' : 'crosshair'; } });
 
   // ---- boyut tutamaci ----
   var pvh = DEF_H;

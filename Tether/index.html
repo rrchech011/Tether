@@ -4,7 +4,7 @@
 </head><body>
 
 <header>
- <h1 title="Klibi takip edilen nesneye bağlar">Tether<span>v2.12.3</span></h1>
+ <h1 title="Klibi takip edilen nesneye bağlar">Tether<span>v2.13.1</span></h1>
  <nav class="tabs">
   <button class="tab on" data-page="pTrack">Takip</button>
   <button class="tab" data-page="pSet">Ayarlar</button>
@@ -16,7 +16,7 @@
 <section id="preview" class="empty">
  <div id="pvBar"><span id="pvTitle">Önizleme · takip bitince görünür</span><label class="sw" id="liveSw" title="Açıkken, önizlemede bir şeyi değiştirip bıraktığında sonuç otomatik olarak Premiere'e yazılır. Yanlış olursa Geri al."><span>Canlı uygula</span><input id="live" type="checkbox"></label><span id="pvTime"></span></div>
  <div id="pvBody">
-  <div id="pvWrap"><canvas id="cv"></canvas></div>
+  <div id="pvWrap"><canvas id="cv"></canvas><div id="pvZoom"><button class="mini" id="pvZout" title="Uzaklaştır (fare tekerleği de çalışır)">−</button><button class="mini wide" id="pvZfit" title="Sığdır (%100). Kaydırma: orta / sağ tuş ya da Boşluk + sürükle">100%</button><button class="mini" id="pvZin" title="Yakınlaştır (fare tekerleği de çalışır)">+</button></div></div>
   <div id="pvCtl"><button class="mini" id="pvPlay" title="Oynat / durdur">▶</button><input id="pvScrub" type="range" min="0" max="0" value="0"><button class="mini wide" id="pvReset" title="Önizlemede sürükleyerek yaptığın ayarı (uzaklık / kadraj noktası) sıfırla. Önizlemeye çift tıklamak da aynı işi yapar.">↺ Konumu sıfırla</button></div>
   <div id="pvLegend"></div>
  </div>
@@ -52,7 +52,10 @@
    <div id="paneOwn" class="hidden" style="margin-top:10px">
    <p class="hint" style="margin-top:0">Klibi seç, oynatma çubuğunu nesnenin göründüğü kareye koy, <b>Kare al</b>'a bas, nesnenin üstüne dikdörtgen çiz, sonra <b>Takip et</b>. Konum, ölçek ve dönme izlenir. Nesne kısa süre kapanırsa bekler ve geri bulur.</p>
    <button id="bOwnFrame" class="act">Kare al</button>
-   <canvas id="ownCv" class="hidden" style="width:auto;max-width:100%;max-height:48vh;display:block;margin:8px auto 0;border:1px solid var(--bd);border-radius:4px;cursor:crosshair;background:#111"></canvas>
+   <div id="ownBox" class="hidden">
+    <div id="ownZoomBar"><span>Kare görüntüsü</span><span class="grow"></span><button class="mini" id="ozOut" title="Uzaklaştır (fare tekerleği de çalışır)">−</button><button class="mini wide" id="ozFit" title="Sığdır (%100). Kaydırma: orta / sağ tuş ya da Boşluk + sürükle">100%</button><button class="mini" id="ozIn" title="Yakınlaştır (fare tekerleği de çalışır)">+</button></div>
+    <div id="ownWrap"><canvas id="ownCv" style="width:auto;max-width:100%;max-height:48vh;display:block;margin:0 auto;border:1px solid var(--bd);border-radius:4px;cursor:crosshair;background:#111"></canvas></div>
+   </div>
    <p class="hint ownmsg" id="ownMsg"></p>
    <div id="ownReview" class="hidden player">
      <div class="plbar"><button class="mini" id="bOwnPlay" title="Oynat / durdur">▶</button><button class="mini" id="bOwnPrev" title="Önceki kare">◀</button><input id="ownScrub" type="range" min="0" max="0" value="0"><button class="mini" id="bOwnNext" title="Sonraki kare">▶</button></div>
@@ -64,7 +67,7 @@
    </div>
    <div class="row" style="margin-top:8px">
     <div class="field"><select id="ownModel"><option value="trans" selected>Yalnız konum (kafa / yüz)</option><option value="scale">Konum + ölçek</option><option value="sim">Konum + ölçek + dönme</option></select><small>Takip modeli</small></div>
-    <div class="field"><select id="ownMethod"><option value="auto" selected>Otomatik</option><option value="pts">Nokta (yüz, dokulu)</option><option value="tpl">Şablon (düz, hızlı nesne)</option></select><small>Yöntem</small></div>
+    <div class="field"><select id="ownMethod"><option value="auto" selected>Otomatik</option><option value="pts">Nokta (yüz, dokulu)</option><option value="tpl">Şablon (düz, hızlı nesne)</option><option value="small">İmleç / küçük nesne (ekran kaydı)</option></select><small>Yöntem</small></div>
     </div>
    <div class="row" style="margin-top:8px">
     <div class="field"><select id="ownAdapt"><option value="1" selected>Açık</option><option value="0">Kapalı</option></select><small>Görünümü uyarla</small></div>

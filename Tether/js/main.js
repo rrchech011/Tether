@@ -110,7 +110,7 @@
   }
 
   /* ===================== v1.9: analiz durumu, asamalar, hatalar, diagnostics ===================== */
-  var PLUGIN_VERSION = '2.12.3';
+  var PLUGIN_VERSION = '2.13.1';
   var OM = window.ObjectMask || null;                 // yoksa (yuklenemediyse) eski akisla devam edilir
   st.diag = { api: null, detection: null, locate: null, parse: null, projectPath: '', xml: null };
   st.omCand = null;
@@ -403,12 +403,46 @@
       g.fillStyle = '#fff'; var hx = [r[0], r[0] + r[2] / 2, r[0] + r[2]], hy = [r[1], r[1] + r[3] / 2, r[1] + r[3]];
       for (var i = 0; i < 3; i++) for (var j = 0; j < 3; j++) { if (i === 1 && j === 1) continue; g.fillRect(hx[i] * cv.width - 3, hy[j] * cv.height - 3, 6, 6); } }
   }
+  // ---- Kare al goruntusunu yakinlastir / uzaklastir: nesne kucukse (fare imleci) kutuyu tam oturtmak icin ----
+  var ownZ = { z: 1, space: false }, OZMIN = 0.4, OZMAX = 14, ownPan = null;
+  function ownZoomApply() {
+    var cv = $('ownCv'), wrap = $('ownWrap'); if (!own.imgW) return;
+    var bw = Math.round(520 * Math.max(1, Math.min(4, ownZ.z)));                // cizim cozunurlugu yakinlastikca artar (en cok 4x)
+    cv.width = bw; cv.height = Math.round(bw * own.imgH / own.imgW);
+    var avail = Math.max(120, (wrap.parentNode.clientWidth || 520) - 4), fit = Math.min(520, avail, 0.48 * window.innerHeight * own.imgW / own.imgH);
+    cv.style.maxWidth = 'none'; cv.style.maxHeight = 'none'; cv.style.width = Math.round(fit * ownZ.z) + 'px'; cv.style.height = 'auto';
+    $('ozFit').textContent = Math.round(ownZ.z * 100) + '%';
+    drawOwn();
+  }
+  function ownZoomAt(f, cx, cy) {                       // (cx,cy): ekran px; o noktanin altindaki goruntu noktasi sabit kalir
+    var cv = $('ownCv'), wrap = $('ownWrap'), r = cv.getBoundingClientRect(); if (!r.width) return;
+    var u = (cx - r.left) / r.width, v = (cy - r.top) / r.height;
+    ownZ.z = Math.max(OZMIN, Math.min(OZMAX, ownZ.z * f)); ownZoomApply();
+    var r2 = cv.getBoundingClientRect(); wrap.scrollLeft += (r2.left + u * r2.width) - cx; wrap.scrollTop += (r2.top + v * r2.height) - cy;
+  }
+  function ownZoomCenter(f) { var r = $('ownWrap').getBoundingClientRect(); ownZoomAt(f, r.left + r.width / 2, r.top + Math.min(r.height, 200) / 2); }
+  $('ozIn').onclick = function () { ownZoomCenter(1.5); };
+  $('ozOut').onclick = function () { ownZoomCenter(1 / 1.5); };
+  $('ozFit').onclick = function () { ownZ.z = 1; ownZoomApply(); $('ownWrap').scrollLeft = 0; $('ownWrap').scrollTop = 0; };
+  $('ownCv').addEventListener('wheel', function (e) { e.preventDefault(); ownZoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
+  $('ownCv').addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  $('ownCv').addEventListener('mousedown', function (e) {
+    if (!(e.button === 1 || e.button === 2 || (e.button === 0 && ownZ.space))) return;
+    var w = $('ownWrap'); ownPan = { x: e.clientX, y: e.clientY, sl: w.scrollLeft, st: w.scrollTop }; e.preventDefault();
+  });
+  window.addEventListener('mousemove', function (e) { if (!ownPan) return; var w = $('ownWrap'); w.scrollLeft = ownPan.sl - (e.clientX - ownPan.x); w.scrollTop = ownPan.st - (e.clientY - ownPan.y); });
+  window.addEventListener('mouseup', function () { ownPan = null; });
+  function ownTyping(e) { var t = e.target && e.target.tagName; return t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA'; }
+  window.addEventListener('keydown', function (e) { if (e.key === ' ' && !ownTyping(e) && !$('ownBox').classList.contains('hidden') && !ownZ.space) { ownZ.space = true; $('ownCv').style.cursor = 'grab'; e.preventDefault(); } });
+  window.addEventListener('keyup', function (e) { if (e.key === ' ' && ownZ.space) { ownZ.space = false; $('ownCv').style.cursor = 'crosshair'; } });
+  window.addEventListener('resize', function () { if (!$('ownBox').classList.contains('hidden')) ownZoomApply(); });
   window.__tetherDbg = { own: own, drawOwn: drawOwn };
   (function () {
     var cv = $('ownCv'), drag = null, CUR = { move: 'move', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize' };
     function pos(e) { var b = cv.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), Math.min(1, Math.max(0, (e.clientY - b.top) / b.height))]; }
     function size() { var b = cv.getBoundingClientRect(); return [b.width, b.height]; }
     cv.addEventListener('mousedown', function (e) {
+      if (e.button !== 0 || ownZ.space) return;                                 // orta / sag tus ve Bosluk+surukle kaydirma icin ayrildi
       var p = pos(e), sz = size(), hit = OWN.rectHit(own.rect, p[0], p[1], sz[0], sz[1]), oh = (!hit && own.rect) ? OWN.rectHit(ownOuter(), p[0], p[1], sz[0], sz[1]) : null;
       if (hit) drag = { mode: hit, p0: p, r0: own.rect.slice() };               // var olan kutuyu tasi / boyutlandir
       else if (oh && oh !== 'move') drag = { mode: 'outer', edge: oh, p0: p, r0: own.rect.slice() };   // arama bolgesini boyutlandir
@@ -441,7 +475,9 @@
       if (d.mode === 'new' && r && (r[2] * sz[0] < 14 || r[3] * sz[1] < 14)) { own.rect = d.r0; drawOwn(); if (!d.r0) { ownMsg('Dikdörtgen çok küçük; nesnenin üstüne daha büyük çiz.', 'err'); $('bOwnRun').disabled = true; } return; }
       if (!r) return;
       $('bOwnRun').disabled = false;
-      ownMsg('Bölge hazır. Kutuyu tutup taşıyabilir, kenar/köşelerinden boyutlandırabilirsin; sonra "Takip et".', 'ok');
+      var srcMax = Math.max(r[2] * (own.imgW || 1), r[3] * (own.imgH || 1));
+      if ($('ownMethod').value === 'auto' && own.imgW && srcMax < 0.07 * own.imgW) ownMsg('Bölge hazır. Nesne küçük görünüyor (~' + Math.round(srcMax) + ' px). Ekran kaydında fare imleci gibi küçük bir şeyse "Yöntem" listesinden "İmleç / küçük nesne"yi seç; sonra "Takip et".', 'ok');
+      else ownMsg('Bölge hazır. Kutuyu tutup taşıyabilir, kenar/köşelerinden boyutlandırabilirsin; sonra "Takip et".', 'ok');
     });
   })();
   $('bOwnFrame').onclick = async function () {
@@ -463,7 +499,7 @@
         var img = new Image();
         img.onload = function () {
           own.img = img; own.imgW = img.width; own.imgH = img.height; own.bg = null; own.res = null; own.frames = null; $('ownReview').classList.add('hidden');
-          var cv = $('ownCv'); cv.classList.remove('hidden'); cv.width = 520; cv.height = Math.round(520 * img.height / img.width); drawOwn();
+          $('ownBox').classList.remove('hidden'); ownZ.z = 1; ownZoomApply();
           ownMsg('Nesnenin üstüne fareyle dikdörtgen çiz (köşeleri/dokuyu içersin). Çizdikten sonra kutuyu taşıyıp boyutlandırabilirsin.');
         };
         img.onerror = function () { ownMsg('Kare görüntüsü yüklenemedi.', 'err'); };
@@ -560,6 +596,21 @@
     return true;
   }
   function ownProg(done, total) { ownMsg('Takip ediliyor… %' + Math.round(100 * done / Math.max(1, total)) + ' (' + done + '/' + total + ' kare)'); }
+  // "Imlec / kucuk nesne" yontemi: kareler yerel cozunurlukte parca parca okunur (bellek uzunluktan bagimsiz); sonuc onizleme karelerinin (own.W x own.H) koordinatina indirilir
+  async function ownSmallRun(inSec, n, refIdx, dir) {
+    var inf = own.info, ff = ownFf(), pr = OWN.probe(ff, inf.mediaPath), srcW = pr ? pr.w : own.imgW, srcH = pr ? pr.h : own.imgH;
+    var Wn = Math.min(srcW, 2560); Wn -= Wn % 2; var Hn = Math.round(Wn * srcH / srcW); Hn -= Hn % 2; var k = Wn / own.W;
+    ownMsg('İmleç / küçük nesne: yerel çözünürlükte izleniyor (' + Wn + '×' + Hn + ')…');
+    var rs = await OWN.trackSmall(ff, inf.mediaPath, { inSec: inSec, fps: own.fps, n: n, refIdx: refIdx, rect: own.rect, W: Wn, H: Hn, dir: dir, searchR: ownSearchR() * k, search: 1, onProgress: ownProg, cancel: function () { return own.cancel; }, sig: own.sig = {} });
+    if (rs.setupError) { ownMsg('HATA: ' + rs.setupError, 'err'); log('Kendi takibim (küçük nesne): ' + rs.setupError); return null; }
+    rs.frames = rs.frames.map(function (f) {
+      if (!f) return null;
+      return { i: f.i, poly: f.poly.map(function (p) { return [p[0] / k, p[1] / k]; }), cx: f.cx / k, cy: f.cy / k, scale: f.scale, rot: f.rot, conf: f.conf };
+    });
+    rs.w = own.W; rs.h = own.H;
+    if (rs.stats) log('Küçük nesne takibi: maske ' + rs.stats.maskPx + ' px, arka plan benzerliği ' + rs.stats.decoy + ', eşikler ' + (rs.stats.thr || []).join('/') + ', kayıp ' + rs.stats.coasts + ', yeniden bulma ' + rs.stats.resumes + '.');
+    return rs;
+  }
   $('bOwnRun').onclick = async function () {
     if (own.running) { own.cancel = true; if (own.sig && own.sig.kill) own.sig.kill(); return; }
     var inf = own.info, ff = ownFf(); if (!inf || !own.rect || !ff) return;
@@ -579,6 +630,15 @@
       if (own.cancel) { ownMsg('Durduruldu.'); return; }
       own.frames = r.frames; own.W = W; own.H = H; own.fps = fps;
       var refIdx = Math.min(r.frames.length - 1, Math.max(0, Math.round((own.tRef - inf.inSec) * fps)));
+      if ($('ownMethod').value === 'small') {   // imlec / kucuk nesne: baska yontemlere dokunmaz
+        var rsm = await ownSmallRun(inf.inSec, r.frames.length, refIdx, $('ownDir').value);
+        if (!rsm) return;
+        own.method = 'small'; own.crop = undefined; own.res = rsm; own.scrub = refIdx; own.anchors = {};
+        if (await ownFinalize(rsm, t0, (rsm.cancelled ? ' (durduruldu: o ana kadarki kısım)' : '') + ' (imleç / küçük nesne, yerel çözünürlük)')) {
+          $('ownReview').classList.remove('hidden'); var sl2 = $('ownScrub'); sl2.max = r.frames.length - 1; sl2.value = refIdx; showScrub(refIdx);
+        }
+        return;
+      }
       var res = await OWN.trackRegionAsync(r.frames, W, H, refIdx, own.rect, { dir: $('ownDir').value, model: $('ownModel').value, adapt: $('ownAdapt').value !== '0', search: 1, searchR: ownSearchR(), searchRy: ownSearchRy(), onProgress: ownProg, cancel: function () { return own.cancel; } });
       var okN = res.frames.filter(Boolean).length, relaxedNote = '', mth = $('ownMethod').value;
       own.method = ''; own.crop = undefined;
@@ -626,7 +686,8 @@
     own.cancel = false; ownBusyUI(true); var t0 = Date.now();
     try {
       var sub = own.frames.slice(lo, hi + 1), off = lo;
-      var res2 = await OWN.trackRegionAsync(sub, own.W, own.H, i - off, own.rect, { dir: dir, method: own.method || undefined, tplCrop: own.crop || undefined, model: $('ownModel').value, adapt: $('ownAdapt').value !== '0', search: 1, searchR: ownSearchR(), searchRy: ownSearchRy(), baseScale: near ? near.scale * ratio : 1, baseRot: near ? near.rot : 0, onProgress: ownProg, cancel: function () { return own.cancel; } });
+      var res2 = own.method === 'small' ? await ownSmallRun(own.info.inSec + lo / own.fps, hi - lo + 1, i - off, dir) : await OWN.trackRegionAsync(sub, own.W, own.H, i - off, own.rect, { dir: dir, method: own.method || undefined, tplCrop: own.crop || undefined, model: $('ownModel').value, adapt: $('ownAdapt').value !== '0', search: 1, searchR: ownSearchR(), searchRy: ownSearchRy(), baseScale: near ? near.scale * ratio : 1, baseRot: near ? near.rot : 0, onProgress: ownProg, cancel: function () { return own.cancel; } });
+      if (!res2) return;
       var out = own.res.frames.slice(), from = dir === 'fwd' ? i : lo, to = dir === 'fwd' ? hi : i;
       for (k = from; k <= to; k++) {
         if (own.anchors[k] && k !== i) continue;           // baska bir duzeltilmis kareyi ezme
