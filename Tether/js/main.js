@@ -110,7 +110,7 @@
   }
 
   /* ===================== v1.9: analiz durumu, asamalar, hatalar, diagnostics ===================== */
-  var PLUGIN_VERSION = '2.13.1';
+  var PLUGIN_VERSION = '2.15.0';
   var OM = window.ObjectMask || null;                 // yoksa (yuklenemediyse) eski akisla devam edilir
   st.diag = { api: null, detection: null, locate: null, parse: null, projectPath: '', xml: null };
   st.omCand = null;
@@ -356,7 +356,7 @@
   var OWN = window.TetherTrack, osm = null, pth = null;
   try { osm = require('os'); pth = require('path'); } catch (eo) {}
   var own = { info: null, rect: null, tRef: 0, ff: undefined, imgW: 0, imgH: 0, img: null };
-  function ownMsg(t, lvl) { var m = $('ownMsg'); m.textContent = t; m.style.color = lvl === 'err' ? 'var(--er)' : (lvl === 'ok' ? 'var(--ok)' : ''); }
+  function ownMsg(t, lvl) { var m = $('ownMsg'); m.textContent = t; m.style.color = lvl === 'err' ? 'var(--er)' : (lvl === 'ok' ? 'var(--ok)' : (lvl === 'warn' ? 'var(--wn)' : '')); }
   function extDir() {
     try { var u = cs.getSystemPath('extension'); u = decodeURI(String(u)).replace(/^file:\/\/\//, ''); if (/^[A-Za-z]:/.test(u)) return u; return '/' + u; } catch (e) {}
     try { return __dirname; } catch (e2) { return null; }
@@ -366,7 +366,9 @@
   // Arama bolgesi (dis kutu): takip bolgesinin her kenarindan pad kadar disari. Elle degistirilmediyse varsayilan + "Dar/Normal/Genis" carpani
   function ownPad() {
     var r = own.rect; if (!r) return [0, 0]; if (own.padUser) return own.padUser;
-    var a = (own.imgH && own.imgW) ? own.imgH / own.imgW : 0.5625, R = Math.max(0.12, 0.9 * Math.max(r[2], r[3] * a)) * (Number($('ownSearch').value) || 1);
+    var a = (own.imgH && own.imgW) ? own.imgH / own.imgW : 0.5625, mul = Number($('ownSearch').value) || 1, m = Math.max(r[2], r[3] * a);
+    // v2.14: Normal'de (carpan 1) buyuk kutularda arama bolgesi daha yavas buyur (esik m0 = 0.12/0.9 ve altinda eski formulle ayni). Dar / Genis eski formulle aynen kalir.
+    var R = Math.min(0.147, 0.12 + 0.25 * Math.max(0, m - 0.12 / 0.9)) * mul;   // v2.16: Dar/Genis da ayni yavas egriyi carpar (Dar her zaman <= Normal), Normal ust siniri 0.147 = Video 1 kutusundaki mevcut deger (0.1466); V1 arama bolgesi AYNEN kalir, daha buyuk kutularda artik buyumez
     return [R, R / a];
   }
   function ownOuter() { var r = own.rect, p = ownPad(); return [r[0] - p[0], r[1] - p[1], r[2] + 2 * p[0], r[3] + 2 * p[1]]; }
@@ -498,7 +500,7 @@
         if (err) return ownMsg('HATA: ' + err, 'err');
         var img = new Image();
         img.onload = function () {
-          own.img = img; own.imgW = img.width; own.imgH = img.height; own.bg = null; own.res = null; own.frames = null; $('ownReview').classList.add('hidden');
+          own.img = img; own.imgW = img.width; own.imgH = img.height; own.bg = null; own.res = null; own.frames = null; own.verify = null; own.pair = null; $('ownReview').classList.add('hidden');
           $('ownBox').classList.remove('hidden'); ownZ.z = 1; ownZoomApply();
           ownMsg('Nesnenin üstüne fareyle dikdörtgen çiz (köşeleri/dokuyu içersin). Çizdikten sonra kutuyu taşıyıp boyutlandırabilirsin.');
         };
@@ -528,12 +530,35 @@
     }
     if (own.anchors) for (var ak in own.anchors) { g.fillStyle = '#7dd3fc'; g.fillRect(Math.floor(ak * W / n), 0, 2, H); }
     g.fillStyle = '#fff'; g.fillRect(Math.floor(cur * W / n), 0, 2, H);
+    drawSusp(cur);
+  }
+  // v2.14: hedef dogrulama seridi (YALNIZ GOSTERIM). Guven cubugunun anlamini degistirmez; own.verify.episodes'u okur. Turuncu = "Kontrol et", kirmizi = "Yuksek suphe". Deneysel, kesin kanit degil.
+  function drawSusp(cur) {
+    var cv = $('ownSusp'), lg = $('ownSuspLegend'), fr = own.res && own.res.frames; if (!cv || !fr) return;
+    var g = cv.getContext('2d'), n = fr.length, W = cv.width, H = cv.height, eps = (own.verify && own.verify.episodes) || [], k, i;
+    g.clearRect(0, 0, W, H);
+    var lvl = new Array(n);
+    for (k = 0; k < eps.length; k++) for (i = Math.max(0, eps[k].from); i <= Math.min(n - 1, eps[k].to); i++) lvl[i] = (eps[k].level === 'yuksek' || lvl[i] === 2) ? 2 : 1;
+    for (i = 0; i < n; i++) if (lvl[i]) { var x = Math.floor(i * W / n), w = Math.max(1, Math.ceil(W / n)); g.fillStyle = lvl[i] === 2 ? '#e11d48' : '#f97316'; g.fillRect(x, 0, w, H); }
+    g.fillStyle = '#fff'; g.fillRect(Math.floor(cur * W / n), 0, 2, H);
+    if (lg) lg.textContent = eps.length ? 'Hedef doğrulama (deneysel): turuncu = Kontrol et, kırmızı = Yüksek şüphe. Üstteki yeşil yalnızca takip sonucu üretildiğini gösterir; hedefin doğru olduğunu doğrulamaz.' : 'Hedef doğrulama: şüpheli aralık bulunmadı. Bu, hedefin doğru takip edildiğinin kanıtı değildir; yeşil yalnızca takip sonucu üretildiğini gösterir.';
   }
   function gotoBad(dir) {
     var n = own.frames ? own.frames.length : 0, i = own.scrub + dir;
     for (; i >= 0 && i < n; i += dir) if (badFrame(i)) { var sl = $('ownScrub'); sl.value = i; showScrub(i); return; }
     ownMsg('Bu yönde zayıf kare yok.');
   }
+  // v2.15: ilk takip <-> alternatif / otomatik duzeltilmis takip. Ikisi de gercek takip ciktisi; degistirince sonuc yeniden olusturulur (Uygula'dan once).
+  function ownAltLabel() { var pr = own.pair; if (!pr) return ''; return pr.showing === 'first' ? (pr.kind === 'auto' ? 'Düzeltilmiş takibi göster' : 'Alternatif takibi göster') : 'İlk (ham) takibi göster'; }
+  $('bOwnAlt') && ($('bOwnAlt').onclick = async function () {
+    var pr = own.pair; if (!pr || own.running) return; ownBusyUI(true);
+    try {
+      pr.showing = pr.showing === 'first' ? 'other' : 'first'; own.res = pr.showing === 'first' ? pr.first : pr.other; own.anchors = {};
+      var mm = pr.showing === 'first' ? pr.mFirst : pr.mOther; own.method = mm.method; own.crop = mm.crop;   // "Buradan ileri / geri" gosterilen sonucu ureten yontemle calissin
+      await ownFinalize(own.res, 0, pr.showing === 'first' ? ' (ilk takip gösteriliyor)' : (pr.kind === 'auto' ? ' (otomatik düzeltilmiş takip gösteriliyor)' : ' (alternatif takip gösteriliyor: "' + pr.name + '")'));
+      showScrub(Number($('ownScrub').value) || 0);
+    } catch (e) { ownMsg('HATA: ' + e, 'err'); } finally { ownBusyUI(false); }
+  });
   function stepScrub(d) { if (!own.frames) return; var sl = $('ownScrub'), i = Math.max(0, Math.min(own.frames.length - 1, Number(sl.value) + d)); sl.value = i; showScrub(i); return i; }
   var playT = null;
   function stopPlay() { if (playT) { clearInterval(playT); playT = null; } $('bOwnPlay').textContent = '▶'; }
@@ -547,6 +572,7 @@
   $('ownSearch').addEventListener('change', function () { own.padUser = null; drawOwn(); });
   $('bOwnPrevBad').onclick = function () { gotoBad(-1); };
   $('bOwnNextBad').onclick = function () { gotoBad(1); };
+  $('ownSusp') && $('ownSusp').addEventListener('click', function (e) { if (!own.frames) return; var r = this.getBoundingClientRect(), i = Math.max(0, Math.min(own.frames.length - 1, Math.floor((e.clientX - r.left) / r.width * own.frames.length))); $('ownScrub').value = i; showScrub(i); });
   $('ownConf').addEventListener('click', function (e) { if (!own.frames) return; var r = this.getBoundingClientRect(), i = Math.max(0, Math.min(own.frames.length - 1, Math.floor((e.clientX - r.left) / r.width * own.frames.length))); $('ownScrub').value = i; showScrub(i); });
   function showScrub(i) {
     own.scrub = i; own.bg = gray2canvas(i);
@@ -570,8 +596,20 @@
   }
   function ownBusyUI(on) { own.running = on; $('bOwnRun').textContent = on ? 'Durdur' : 'Takip et'; $('bOwnRun').classList.toggle('primary', !on); ['bOwnFrame', 'bOwnFwd', 'bOwnBwd'].forEach(function (id) { $(id).disabled = on; }); $('ownScrub').disabled = on; }
   // Sonucu Tether takip verisine cevir ve durum panelini guncelle
+  // v2.14: hedef dogrulama uyari metni. Kare numaralari arayuzdeki gibi 1'den baslar. B DENEYSELDIR; hicbir ifade kesin hedef kaybi iddiasi degildir.
+  function ownVerifyText(ver) {
+    if (!ver || !ver.episodes || !ver.episodes.length) return '';
+    function ranges(list) { var segs = list.map(function (e) { return [e.from, e.to]; }).sort(function (a, b) { return a[0] - b[0]; }), out = [], k; for (k = 0; k < segs.length; k++) { var l = out[out.length - 1]; if (l && segs[k][0] <= l[1] + 1) l[1] = Math.max(l[1], segs[k][1]); else out.push(segs[k].slice()); } return out.slice(0, 3).map(function (s) { return (s[0] + 1) + '–' + (s[1] + 1); }).join(', ') + (out.length > 3 ? ', …' : ''); }
+    var all = ranges(ver.episodes), hi = ver.episodes.filter(function (e) { return e.level === 'yuksek'; }), A = ver.episodes.filter(function (e) { return e.signal === 'A'; }), B = ver.episodes.filter(function (e) { return e.signal === 'B'; });
+    var t = 'Şüpheli aralık: ' + all + '.';
+    if (hi.length) t += ' Yüksek şüphe (' + ranges(hi) + '): kutu ilk karedeki görünümden uzak ve görüntüde neredeyse hiç hareket etmiyor; hedef kaybedilmiş olabilir (deneysel).';
+    if (A.length) t += ' Kontrol et (' + ranges(A) + '): kutunun içeriği ilk karedeki görünümden uzaklaştı; yüz dönmüş de olabilir, takip başka bir yere kaymış da.';
+    if (B.length) t += ' Kontrol et (' + ranges(B) + '): kutu neredeyse hiç hareket etmiyor; hedef gerçekten duruyorsa sorun yok, değilse arka plana kilitlenmiş olabilir (deneysel).';
+    return t + ' ';
+  }
   async function ownFinalize(res, t0, note) {
-    var inf = own.info, inT = inf.inSec * TPS_, ft = Number(inf.frameTicks);
+    own.verify = null;   // eski dogrulama sonucu yeni takibe karismasin
+    var inf = own.info, inT = inf.inSec * TPS_, ft = own.fps ? TPS_ / own.fps : Number(inf.frameTicks);   // v2.16: takip kare hizi (klip hizi olabilir)
     var pts = OWN.toPoints(res, function (i) { return Math.round(inT + i * ft); });
     if (pts.length < 2) { ownMsg('Takip başarısız: ' + (res.reasonFwd || res.reasonBwd || 'bölgede takip edilecek doku bulunamadı') + '. Daha dokulu bir bölge seç.', 'err'); return false; }
     var timing = { start: Number(inf.startTicks), end: Number(inf.endTicks), inP: inT, outP: inf.outSec * TPS_, ratio: 1 };
@@ -586,9 +624,15 @@
     mark('card1', true); refreshPreview(false); updateReady();
     var span = Math.round((pts[pts.length - 1].src - pts[0].src) / ft) + 1, holes = Math.max(0, span - pts.length);
     var weakN = res.frames.filter(function (f) { return f && f.conf < WEAK; }).length, weakTxt = weakN ? ' ' + weakN + ' kare zayıf güvenli (grafikte sarı).' : '';
+    // v2.14: hedef dogrulama UYARISI (yalniz uyari; takip sonucu, keyframe'ler ve Uygula akisi degismez). Hata verirse sessizce atlanir.
+    var ver = null; try { ver = (own.method !== 'small' && own.verRef && own.frames) ? await OWN.verifyTargetAsync(res, own.frames, own.W, own.H, own.verRef.idx, own.verRef.rect, { fps: own.fps, cuts: own.cutsIdx || [], anchors: own.anchors || {} }) : null; } catch (e) { log('Hedef doğrulama atlandı: ' + (e && e.message || e)); }
+    var bAlt = $('bOwnAlt'); if (bAlt) { bAlt.classList.toggle('hidden', !own.pair); if (own.pair) bAlt.textContent = ownAltLabel(); }
+    own.verify = ver; var vm = ownVerifyText(ver); try { drawConf(own.scrub || 0); } catch (e) {}
     var holeTxt = holes ? ' ' + holes + ' kare takipsiz (kapanma / kayıp); arası doğrusal geçilir. Kaydırıcıyla o kareye gidip kutuyu nesneye çek, "Buradan ileri" de.' : '';
-    ownMsg('✓ ' + pts.length + ' kare izlendi' + (t0 ? ' (' + ((Date.now() - t0) / 1000).toFixed(1) + ' sn)' : '') + '.' + (note || '') + holeTxt + weakTxt + ' Kontrol edip Uygula\'ya geç.', 'ok');
+    if (vm) ownMsg('⚠ ' + pts.length + ' kare işlendi' + (t0 ? ' (' + ((Date.now() - t0) / 1000).toFixed(1) + ' sn)' : '') + '; hedefin doğru takip edildiği doğrulanamadı. ' + vm + (note || '') + holeTxt + weakTxt + ' Bu bir uyarıdır, kesin hedef kaybı kanıtı değil; kareleri kontrol et. Yeşil yalnızca takip sonucu üretildiğini gösterir; "İzlendi" hedefin doğru olduğunu doğrulamaz. Çubuğun altındaki turuncu / kırmızı şerit şüpheli aralıkları gösterir.', 'warn');
+    else ownMsg('✓ ' + pts.length + ' kare izlendi' + (t0 ? ' (' + ((Date.now() - t0) / 1000).toFixed(1) + ' sn)' : '') + '.' + (note || '') + holeTxt + weakTxt + ' Yeşil yalnızca takip sonucu üretildiğini gösterir; hedefin doğru olduğu doğrulanmadı. Kontrol edip Uygula\'ya geç.', 'ok');
     log('Kendi takibim: ' + pts.length + ' kare, konum + ölçek + dönme.' + (holes ? ' ' + holes + ' kare boş.' : ''));
+    if (vm) log('UYARI: Hedef doğrulama (deneysel): ' + vm);
     setInfo('srcInfo', '<b>' + esc(c.name) + '</b><br>Kendi takibim · ' + pts.length + ' kare', 'ok');
     renderGrid(currentGrid());
     setCell('gMask', LV.ok + ' Kendi takibim', 'ok'); setCell('gStatus', LV.ok + ' Takip tamamlandı', 'ok'); setCell('gTrk', LV.ok + ' ' + pts.length + ' kare · konum + ölçek + dönme', 'ok');
@@ -614,11 +658,14 @@
   $('bOwnRun').onclick = async function () {
     if (own.running) { own.cancel = true; if (own.sig && own.sig.kill) own.sig.kill(); return; }
     var inf = own.info, ff = ownFf(); if (!inf || !own.rect || !ff) return;
-    own.cancel = false; ownBusyUI(true);
+    own.cancel = false; ownBusyUI(true); own.pair = null; own.cutsIdx = [];
     var t0 = Date.now();
     try {
-      var fps = TPS_ / Number(inf.frameTicks), dur = inf.outSec - inf.inSec;
+      var seqFps = TPS_ / Number(inf.frameTicks), dur = inf.outSec - inf.inSec;
       var pr = OWN.probe(ff, inf.mediaPath), asp = pr ? pr.h / pr.w : own.imgH / own.imgW;
+      // v2.16: takip KLIBIN KENDI kare hizinda yapilir (ffmpeg'in dizi hizina kare cogaltmasi / atmasi hareketi duzensizlestiriyordu: 24 fps klip, 25/60 fps dizi). Dizi hizina esleme compute()'ta yapilir. Klip hizi okunamazsa dizi hizi (eski davranis).
+      var fps = (pr && pr.fps && Math.abs(pr.fps - seqFps) > 0.02 * seqFps) ? pr.fps : seqFps; own.nativeFps = fps !== seqFps ? fps : 0;
+      if (own.nativeFps) log('Takip klibin kendi kare hızında yapılıyor: ' + fps + ' fps (dizi ' + (Math.round(seqFps * 100) / 100) + ' fps); konumlar dizi karelerine eşlenecek.');
       var W = Number($('ownRes').value) || 640, nF = Math.round(dur * fps);
       while (nF * W * Math.round(W * asp) > 420e6 && W > 240) W = Math.floor(W * 0.85);
       W -= W % 2; var H = Math.round(W * asp); H -= H % 2;
@@ -640,21 +687,41 @@
         return;
       }
       var res = await OWN.trackRegionAsync(r.frames, W, H, refIdx, own.rect, { dir: $('ownDir').value, model: $('ownModel').value, adapt: $('ownAdapt').value !== '0', search: 1, searchR: ownSearchR(), searchRy: ownSearchRy(), onProgress: ownProg, cancel: function () { return own.cancel; } });
-      var okN = res.frames.filter(Boolean).length, relaxedNote = '', mth = $('ownMethod').value;
+      // v2.16: sahne kesmesi varsa "sablonla doldurma" yalniz REFERANS SAHNESINDE yapilir (diger sahnelerde nesne yoktur; orada dolgu uydurma konum olurdu). Kesme yoksa sahne = tum klip, davranis AYNEN.
+      var cutsE = []; try { OWN.detectCutsStrict(r.frames, W, H).forEach(function (c, ci) { if (c) cutsE.push(ci); }); } catch (e) {}
+      var scB = OWN._fgSceneBounds(r.frames.length, refIdx, cutsE), scN = scB[1] - scB[0] + 1;
+      function inSc(q) { return q >= scB[0] && q <= scB[1]; }
+      function cntSc(rr) { var c = 0, q; for (q = scB[0]; q <= scB[1]; q++) if (rr.frames[q]) c++; return c; }
+      function onlySc(rr) { return (scN === r.frames.length) ? rr : Object.assign({}, rr, { frames: rr.frames.map(function (f, q) { return inSc(q) ? f : null; }) }); }
+      var okN = cntSc(res), relaxedNote = '', mth = $('ownMethod').value;
       own.method = ''; own.crop = undefined;
-      if (mth === 'tpl' || (mth === 'auto' && !res.cancelled && r.frames.length > 12 && okN < Math.round(r.frames.length * 0.95))) {   // nokta takibi zayifsa (dokusuz / hizli nesne) sablon eslestirmeyi dene
+      if (mth === 'tpl' || (mth === 'auto' && !res.cancelled && r.frames.length > 12 && okN < Math.round(scN * 0.95))) {   // nokta takibi zayifsa (dokusuz / hizli nesne) sablon eslestirmeyi dene
         ownMsg('Şablon eşleştirme deneniyor…');
         var rt = null, okT = -1, crops = [0.7, 1], ci;      // iki sablon boyutu dene (ic kisim / tum kutu); daha cok kare izleyeni sec
         for (ci = 0; ci < crops.length && !own.cancel; ci++) {
           var rc = await OWN.trackRegionAsync(r.frames, W, H, refIdx, own.rect, { dir: $('ownDir').value, model: $('ownModel').value, adapt: $('ownAdapt').value !== '0', search: 1, searchR: ownSearchR(), searchRy: ownSearchRy(), method: 'tpl', tplCrop: crops[ci], onProgress: ownProg, cancel: function () { return own.cancel; } });
-          var okC = rc.frames.filter(Boolean).length;
+          rc = onlySc(rc); var okC = cntSc(rc);
           if (okC > okT) { rt = rc; okT = okC; own.crop = crops[ci]; }
         }
-        var wholesale = mth === 'tpl' || okN < Math.round(r.frames.length * 0.5);
+        var wholesale = mth === 'tpl' || okN < Math.round(scN * 0.5);
         if (rt && !wholesale && okT > okN && !own.cancel) {   // nokta takibi iyi ama bosluklari var: bosluklari sablon takibiyle doldur (zayif / sari isaretli)
           var rf2 = OWN.fillGaps(res, rt); log('Kendi takibim: nokta takibi ' + okN + ' kare; ' + rf2.filled + ' boş kare şablon eşleştirmeyle dolduruldu (zayıf işaretli).'); res = rf2; okN = res.frames.filter(Boolean).length; relaxedNote = ' (' + rf2.filled + ' kare şablonla dolduruldu)';
         }
-        if (rt && wholesale && (mth === 'tpl' || okT > okN * 1.25)) { log('Kendi takibim: nokta takibi ' + okN + ', şablon eşleştirme ' + okT + ' kare izledi; şablon yöntemi seçildi.'); res = rt; okN = okT; own.method = 'tpl'; relaxedNote = ' (şablon eşleştirme)'; }
+        if (rt && wholesale && (mth === 'tpl' || okT > okN * 1.25)) {
+          // v2.14: "Otomatik"te şablon, yalnızca daha çok kare izledi diye nokta sonucunun yerine konmaz; ortak karelerdeki fark ölçülür (OWN.autoPick). Elle seçilen "Şablon" yöntemi eskisi gibi.
+          var pick = mth === 'tpl' ? { mode: 'template', verified: true } : OWN.autoPick(res, rt, { boxW: own.rect[2] * W, boxH: own.rect[3] * H });
+          if (pick.mode === 'template') {
+            log('Kendi takibim: nokta takibi ' + okN + ', şablon eşleştirme ' + okT + ' kare izledi; şablon yöntemi seçildi.' + (pick.verified === false ? ' (Nokta takibi yalnız ' + pick.overlap + ' ortak kare verdi; şablon sonucu doğrulanamadı.)' : '')); res = rt; okN = okT; own.method = 'tpl';
+            relaxedNote = ' (şablon eşleştirme' + (pick.verified === false ? '; nokta takibiyle doğrulanamadı, önizlemeyi dikkatle kontrol et' : '') + ')';
+          } else if (pick.mode === 'fill') {
+            log('Kendi takibim: nokta takibi ' + okN + ' kare; şablon sonucu ortak ' + pick.overlap + ' karede nokta takibiyle uyumlu (ortanca fark ' + pick.medianPx.toFixed(1) + ' px). Nokta kareleri korundu, ' + pick.filled + ' boş kare şablonla dolduruldu (zayıf işaretli).');
+            res = pick.res; okN = res.frames.filter(Boolean).length; relaxedNote = ' (nokta kareleri korundu; ' + pick.filled + ' kare şablonla dolduruldu)';
+          } else {
+            var pct = Math.round(100 * pick.badFrac);
+            log('UYARI: Kendi takibim: şablon sonucu, ortak ' + pick.overlap + ' karenin %' + pct + '\'inde nokta takibinden kutu boyunun %25\'inden fazla ayrıldı (ortanca ' + pick.medianPx.toFixed(1) + ' px). Hangisinin doğru olduğu belirlenemediği için nokta takibi korundu, şablon kullanılmadı.');
+            relaxedNote = ' · UYARI: şablon eşleştirme nokta takibiyle çeliştiği için kullanılmadı; yalnız nokta takibinin ' + okN + ' karesi var. Takipsiz karelerde kutuyu nesneye çekip "Buradan ileri / geri" ile sür.';
+          }
+        }
       }
       if (!res.cancelled && own.method !== 'tpl' && r.frames.length > 30 && okN < Math.max(8, Math.round(r.frames.length * 0.03))) {   // neredeyse hic takip yok: hassas modla bir kez daha dene
         log('Kendi takibim: ilk deneme yalnız ' + okN + ' kare izledi; hassas modla yeniden deneniyor.' + (res.stats ? ' [' + JSON.stringify(res.stats) + ']' : ''));
@@ -663,9 +730,31 @@
         relaxedNote = ' (hassas mod)';
       }
       if (res.stats) log('Takip tanısı: kayıp ' + res.stats.coasts + ' (nokta ' + res.stats.lkLost + ', görünüm ' + res.stats.lowApp + '), takip yeniden sürdürme ' + res.stats.resumes + ', şablonla yeniden bulma ' + res.stats.reacqs + '.');
-      var cutIdx = []; OWN.detectCuts(r.frames).forEach(function (c, ci) { if (c) cutIdx.push(ci + 1); });
+      var cutIdx = []; own.cutsIdx = cutsE.slice(); cutsE.forEach(function (ci) { cutIdx.push(ci + 1); });   // v2.16: kesmeler yukarida (sablon asamasindan once) bir kez hesaplandi
       if (cutIdx.length) { relaxedNote += ' · sahne kesmesi / ani plan değişimi: kare ' + cutIdx.slice(0, 5).join(', ') + (cutIdx.length > 5 ? '…' : '') + ' (orada takip güvenilmez, kontrol et)'; log('Kendi takibim: sahne kesmesi kareleri: ' + cutIdx.join(', ')); }
+      // v2.15: dogrulamali duzeltme. YALNIZ "Otomatik" yontemde ve hedef dogrulama supheli donem (ya da cok bos kare) buluyorsa calisir; supheli donem yoksa sonuc AYNEN kalir.
+      // Adaylar (sablon / birlesik / sabit kamera on plan) gercek goruntu kanitiyla uretilir; yalniz belirgin sekilde daha az supheli+bos kare veren aday alinir.
+      if (mth === 'auto' && !res.cancelled && !own.cancel && own.method !== 'small' && r.frames.length > 12) {
+        try {
+          var imp = await OWN.improveTrackAsync(res, r.frames, W, H, refIdx, own.rect, { fps: own.fps, cuts: own.cutsIdx || [], anchors: {}, cancel: function () { return own.cancel; }, onStage: function (t, p) { ownMsg('Doğrulama şüphe buldu — ' + t + (p == null ? '…' : ' %' + p) + ' (bu aşama birkaç dakika sürebilir)'); },
+            base: { dir: $('ownDir').value, model: $('ownModel').value, adapt: $('ownAdapt').value !== '0', search: 1, searchR: ownSearchR(), searchRy: ownSearchRy() } });
+          log('Doğrulamalı düzeltme: ilk sonuç şüpheli ' + imp.report.base.suspect + ' + boş ' + imp.report.base.missing + ' kare; adaylar: ' + (imp.report.cands.map(function (c) { return c.name + ' (şüpheli ' + c.suspect + ', boş ' + c.missing + (c.high ? ', yüksek şüphe' : '') + ')'; }).join('; ') || 'yok') + (imp.report.fg && imp.report.fg.reason ? ' [ön plan: ' + imp.report.fg.reason + ']' : ''));
+          own.pair = null;
+          if (imp.changed) {
+            res = imp.res; okN = res.frames.filter(Boolean).length; relaxedNote += imp.note; log('Doğrulamalı düzeltme: "' + res.improvedBy + '" seçildi (otomatik).');
+            own.crop = res.improvedBy === 'şablon' ? 0.7 : (res.improvedBy === 'şablon (tam kutu)' ? 1 : undefined); own.method = (res.improvedBy.indexOf('şablon') === 0) ? 'tpl' : '';
+            own.pair = { kind: 'auto', name: res.improvedBy, first: imp.orig, other: res, showing: 'other', mFirst: { method: '', crop: undefined }, mOther: { method: own.method, crop: own.crop } };
+          } else if (imp.alt) {
+            own.pair = { kind: 'alt', name: imp.alt.name, first: res, other: imp.alt.res, showing: 'first', mFirst: { method: own.method, crop: own.crop }, mOther: { method: (imp.alt.name.indexOf('şablon') === 0 ? 'tpl' : ''), crop: imp.alt.name === 'şablon' ? 0.7 : (imp.alt.name === 'şablon (tam kutu)' ? 1 : undefined) } };
+            relaxedNote += ' · Alternatif takip hazır ("' + imp.alt.name + '"; şüpheli+boş kare ' + imp.alt.score + ', ilk takipte ' + imp.report.base.score + '). Kendiliğinden uygulanmadı: "Alternatif takibi göster" ile karşılaştır, beğenmezsen "İlk takibe dön".';
+            log('Doğrulamalı düzeltme: alternatif hazır, uygulanmadı: ' + imp.alt.name);
+          }
+        } catch (e) { log('Doğrulamalı düzeltme atlandı: ' + (e && e.message || e)); }
+      }
+      try { var sj = OWN.smoothJumps(res, Math.max(6, Math.round(0.5 * own.fps)), 0.25); if (sj.jumps) { res = sj.res; relaxedNote += ' · ' + sj.jumps + ' yerde kutu bir karede çok sıçradı (takip kaynağı değişimi); geçiş yumuşatıldı (sarı kareler)'; log('Takip kaynağı birleşiminde ' + sj.jumps + ' sıçrama yumuşatıldı.'); } } catch (e) {}
+      try { var dw = OWN.dropFrozenAfterCuts(res, own.cutsIdx || [], refIdx, own.W); if (dw.dropped) { res = dw.res; relaxedNote += ' · sahne kesmesinden sonra arka plana sabitlenip hiç kımıldamayan ' + dw.dropped + ' kare takipsiz bırakıldı (keyframe yapılmaz)'; log('Sahne kesmesi sonrası sabitlenmiş takip silindi: ' + dw.dropped + ' kare.'); } } catch (e) {}
       own.res = res; own.scrub = refIdx; own.anchors = {};
+      own.verRef = { idx: refIdx, rect: own.rect.slice() };   // v2.14: hedef dogrulama uyarisi icin ILK referans (yeniden takipte kutu degisse bile ilk gorunum kullanilir)
       if (await ownFinalize(res, t0, (res.cancelled ? ' (durduruldu: o ana kadarki kısım)' : '') + relaxedNote)) {
         $('ownReview').classList.remove('hidden'); var sl = $('ownScrub'); sl.max = r.frames.length - 1; sl.value = refIdx; showScrub(refIdx);
       }
@@ -673,6 +762,7 @@
     finally { ownBusyUI(false); }
   };
   $('ownScrub').addEventListener('input', function () { if (own.res && own.frames) showScrub(Number($('ownScrub').value)); });
+  function anchorsHit(k) { return !!(own.anchors && own.anchors[k]); }
   async function ownRetrack(dir) {
     if (!own.res || !own.frames || !own.rect) return;
     var i = own.scrub, fr = own.res.frames, near = null, d, N = own.frames.length;
@@ -683,20 +773,76 @@
     var lo = 0, hi = N - 1, k;
     if (dir === 'fwd') { for (k = i + 1; k < N; k++) if (own.anchors[k]) { hi = k; break; } }
     else { for (k = i - 1; k >= 0; k--) if (own.anchors[k]) { lo = k; break; } }
+    own.pair = null;   // elle duzeltme gecerli sonuca uygulanir; ilk/alternatif karsilastirmasi sona erer
     own.cancel = false; ownBusyUI(true); var t0 = Date.now();
     try {
       var sub = own.frames.slice(lo, hi + 1), off = lo;
       var res2 = own.method === 'small' ? await ownSmallRun(own.info.inSec + lo / own.fps, hi - lo + 1, i - off, dir) : await OWN.trackRegionAsync(sub, own.W, own.H, i - off, own.rect, { dir: dir, method: own.method || undefined, tplCrop: own.crop || undefined, model: $('ownModel').value, adapt: $('ownAdapt').value !== '0', search: 1, searchR: ownSearchR(), searchRy: ownSearchRy(), baseScale: near ? near.scale * ratio : 1, baseRot: near ? near.rot : 0, onProgress: ownProg, cancel: function () { return own.cancel; } });
       if (!res2) return;
       var out = own.res.frames.slice(), from = dir === 'fwd' ? i : lo, to = dir === 'fwd' ? hi : i;
-      for (k = from; k <= to; k++) {
+      // S1: baslatma hatasi (motor ilk karede takibe baslayamadi: lostFwd/lostBwd = referans kare, tek gecerli kare = duzeltilen kare; durdurma DEGIL).
+      // Bu durumda onceki takip KORUNUR; yalniz kullanicinin duzeltilen karesi yazilir (capa zaten ona aittir).
+      var sfN = 0, sfK; for (sfK = 0; sfK < res2.frames.length; sfK++) if (res2.frames[sfK]) sfN++;
+      var startFail = !res2.cancelled && (dir === 'fwd' ? res2.lostFwd : res2.lostBwd) === i - off && sfN === 1 && !!res2.frames[i - off], wFrom = startFail ? i : from, wTo = startFail ? i : to;
+      for (k = wFrom; k <= wTo; k++) {
         if (own.anchors[k] && k !== i) continue;           // baska bir duzeltilmis kareyi ezme
         var nf = res2.frames[k - off] || null;
         if (nf) { nf = Object.assign({}, nf); nf.i = k; }
         out[k] = nf;
       }
+      // v2.16: elle duzeltilen kareye ISINLANMA olmasin. Duzeltme noktasinin onceki (fwd) / sonraki (bwd) ~1.5 sn'lik kareleri, eski takipten duzeltilmis konuma dogrusal gecirilir; gecis kareleri zayif guvenli (sari) isaretlenir.
+      try {
+        var K = Math.max(3, Math.round(1.5 * own.fps)), s1 = dir === 'fwd' ? -1 : 1, e1 = out[i], oldEnd = out[i + s1 * K] || null, q, oldf = own.res.frames;
+        if (e1 && oldf[i + s1 * K] && oldf[i + s1 * K].poly && e1.poly && i + s1 * K >= 0 && i + s1 * K < N) {
+          var o2 = oldf[i + s1 * K], jump = Math.hypot(oldf[i] ? oldf[i].cx - e1.cx : 0, oldf[i] ? oldf[i].cy - e1.cy : 0), ok2 = true;
+          for (q = 1; q < K; q++) if (anchorsHit(i + s1 * q)) ok2 = false;
+          if (ok2 && jump > 0) for (q = 1; q < K; q++) {
+            var k2 = i + s1 * q, of = oldf[k2], w2 = q / K;   // w2: eski takibin agirligi
+            if (!of || !of.poly) continue;
+            var nb = Object.assign({}, of); nb.cx = e1.cx + (o2.cx - e1.cx) * w2; nb.cy = e1.cy + (o2.cy - e1.cy) * w2;
+            nb.poly = of.poly.map(function (pt, z) { var A = e1.poly[z], B = o2.poly[z]; return [A[0] + (B[0] - A[0]) * w2, A[1] + (B[1] - A[1]) * w2]; });
+            nb.conf = Math.min(of.conf, 0.45); nb.i = k2; out[k2] = nb;
+          }
+        }
+      } catch (e) { log('Geçiş yumuşatma atlandı: ' + (e && e.message || e)); }
+      // A2-0 (tani): yeniden takip oncesi / sonrasi takipsiz kare sayisi. YALNIZ Gunluge yazar; sonucu (out) degistirmez.
+      try {
+        var dg0 = own.res.frames, dgB = 0, dgA = 0, dgLost = 0, dgGain = 0, dgK;
+        for (dgK = 0; dgK < N; dgK++) { if (!dg0[dgK]) dgB++; if (!out[dgK]) dgA++; }
+        var dgR = [], dgS = -1, dgL;   // A2-1a: bosalan karelerin aralik listesi (1 tabanli, arayuzdeki gibi)
+        for (dgK = from; dgK <= to + 1; dgK++) {
+          dgL = dgK <= to && dg0[dgK] && !out[dgK];
+          if (dgK <= to) { if (dgL) dgLost++; else if (!dg0[dgK] && out[dgK]) dgGain++; }
+          if (dgL) { if (dgS < 0) dgS = dgK; } else if (dgS >= 0) { dgR.push(dgS === dgK - 1 ? String(dgS + 1) : (dgS + 1) + '–' + dgK); dgS = -1; }
+        }
+        var dgTxt = dgR.length ? ' Boşalan kareler: ' + (dgR.length > 12 ? dgR.slice(0, 12).join(', ') + ' … (+' + (dgR.length - 12) + ' aralık daha)' : dgR.join(', ')) + '.' : '';
+        log('Buradan ' + (dir === 'fwd' ? 'ileri' : 'geri') + ' takip (kare ' + (i + 1) + ', bölge ' + (from + 1) + '–' + (to + 1) + (res2.cancelled ? ', durduruldu' : '') + '): takipsiz kare ' + dgB + ' → ' + dgA + ' / ' + N + '; bölgede eskiden izli ' + dgLost + ' kare boşaldı, ' + dgGain + ' boş kare doldu.' + (dgLost ? ' UYARI: yeni takip bu karelerde sonuç üretemedi; önceki sonuç silindi, Uygula bu karelere keyframe yazmaz.' : '') + dgTxt);
+        if (res2.stats) log('Yeniden takip tanısı: kayıp ' + res2.stats.coasts + ' (nokta ' + res2.stats.lkLost + ', görünüm ' + res2.stats.lowApp + '), takip yeniden sürdürme ' + res2.stats.resumes + ', şablonla yeniden bulma ' + res2.stats.reacqs + '. Yöntem: ' + (own.method === 'tpl' ? 'şablon' : 'nokta') + '.');
+      } catch (e) { }
+      // S0/S1 (kullaniciya gorunur uyari): yalniz Gunluk + ownFinalize mesaji; sonucu (out) degistirmez. Basarili yolda sfNote / tailNote bos kalir -> mesaj eskisiyle birebir ayni.
+      var sfNote = '', tailNote = '';
+      try {
+        if (startFail) {
+          sfNote = ' ⚠ YENİDEN TAKİP BAŞLATILAMADI: ' + ((dir === 'fwd' ? res2.reasonFwd : res2.reasonBwd) || 'bölgede takip edilecek doku yok.') + ' Önceki takip korundu; yalnız kare ' + (i + 1) + ' düzeltildi (düzeltmeden sonrası eski takip konumlarında kalır).';
+          log('Yeniden takip başlatılamadı (kare ' + (i + 1) + '): ' + ((dir === 'fwd' ? res2.reasonFwd : res2.reasonBwd) || 'bölgede takip edilecek doku yok.') + ' Önceki takip korundu; yalnız kare ' + (i + 1) + ' düzeltildi.');
+        } else {
+          // S0: kuyruk kaybi = motorun son (fwd) / ilk (bwd) gecerli karesinden bolge ucuna kadar, ESKIDEN izli olup SIMDI bos kalan kareler (eskiden bos olanlar sayilmaz; gecis blogundan sonraki out ile karsilastirilir)
+          var s0Old = own.res.frames, s0N = 0, s0A = -1, s0B = -1, s0K, s0Edge = i;
+          if (dir === 'fwd') { for (s0K = i; s0K <= to; s0K++) if (res2.frames[s0K - off]) s0Edge = s0K; for (s0K = s0Edge + 1; s0K <= to; s0K++) if (!(own.anchors[s0K] && s0K !== i) && s0Old[s0K] && !out[s0K]) { s0N++; if (s0A < 0) s0A = s0K; s0B = s0K; } }
+          else { for (s0K = i; s0K >= from; s0K--) if (res2.frames[s0K - off]) s0Edge = s0K; for (s0K = s0Edge - 1; s0K >= from; s0K--) if (!(own.anchors[s0K] && s0K !== i) && s0Old[s0K] && !out[s0K]) { s0N++; if (s0B < 0) s0B = s0K; s0A = s0K; } }
+          if (s0N > 0) {
+            tailNote = res2.cancelled
+              ? ' ⚠ Durdurulduğu için eskiden izli ' + s0N + ' kare (' + (s0A + 1) + '–' + (s0B + 1) + ' aralığında) boşaldı.'
+              : ' ⚠ KUYRUK KAYBI: yeni takip kare ' + (s0Edge + 1) + (dir === 'fwd' ? ' sonrasında' : ' öncesinde') + ' durdu; eskiden izli ' + s0N + ' kare (' + (s0A + 1) + '–' + (s0B + 1) + ' aralığında) boşaldı. Kutuyu nesneye çekip tekrar "Buradan ' + (dir === 'fwd' ? 'ileri' : 'geri') + '" de.';
+            log('Yeniden takip: ' + tailNote.replace(/^ ⚠ /, ''));
+          }
+          // S0b: kuyruk disindaki (ic) kayiplar da panel mesajinda gorunur; sayi A2 Gunluk blogundaki dgLost'tan (eskiden izli, simdi bos) kuyruk kaybi cikarilarak bulunur
+          var s0Other = (typeof dgLost === 'number' ? dgLost : 0) - s0N;
+          if (s0Other > 0) { var oNote = ' ⚠ ' + (s0N > 0 ? 'Ayrıca eskiden' : 'Eskiden') + ' izli ' + s0Other + ' kare boşaldı (aralıklar Günlükte).'; tailNote += oNote; log('Yeniden takip: ' + oNote.replace(/^ ⚠ /, '')); }
+        }
+      } catch (e) { }
       own.res = Object.assign({}, own.res, { frames: out });
-      await ownFinalize(own.res, t0, (res2.cancelled ? ' (durduruldu)' : '') + (hi < N - 1 && dir === 'fwd' ? ' (bir sonraki düzeltmeye kadar)' : '') + (lo > 0 && dir === 'bwd' ? ' (bir önceki düzeltmeye kadar)' : ''));
+      await ownFinalize(own.res, t0, (res2.cancelled ? ' (durduruldu)' : '') + (hi < N - 1 && dir === 'fwd' ? ' (bir sonraki düzeltmeye kadar)' : '') + (lo > 0 && dir === 'bwd' ? ' (bir önceki düzeltmeye kadar)' : '') + sfNote + tailNote);
       showScrub(i);
     } catch (e) { ownMsg('HATA: ' + e, 'err'); log('HATA: Kendi takibim (yeniden): ' + (e && e.stack || e)); }
     finally { ownBusyUI(false); }
@@ -730,6 +876,8 @@
     return [vx, vy];
   }
   function where_for_opts() { return WHERE(); }
+  // 'Yalnız konum' modelinde takip verisi ölçek/dönme taşımaz; boyut-takibi ayarları gizlenir ve uygulanmaz
+  function posOnly() { return !!$('ownModel') && $('ownModel').value === 'trans'; }
   function buildOpts(tgt) {
     var ss = effectiveSrcSize();
     return {
@@ -738,9 +886,9 @@
       mode: $('mode').value, tgtPos: tgt.pos,
       step: Math.max(1, num('step', 1)), smooth: Math.max(0, num('smooth', 0)), tol: Math.max(0, num('tol', 0)),
       zoom: ($('zoomMode').value === 'keep' && st.src) ? (Number(st.src.scale) || 100) : (num('zoom', 150) || 150),
-      zoomMax: num('zoomMax', 300) || 300, dynZoom: $('zoomMode').value === 'auto', sizeTrack: $('sizeTrack').checked, sizeStr: Math.max(0, num('sizeStr', 70)),
+      zoomMax: num('zoomMax', 300) || 300, dynZoom: $('zoomMode').value === 'auto', sizeTrack: !posOnly() && $('sizeTrack').checked, sizeStr: Math.max(0, num('sizeStr', 70)),
       despike: $('despike').checked ? 0.05 : 0, deadzone: Math.max(0, num('dz', 0)) / 100,
-      offset: [num('offX', 0), num('offY', 0)], pin: [pct('pinX'), pct('pinY')], stats: {}, vis: visOffset(tgt), rotTrack: !!($('rotTrack') && $('rotTrack').checked), rotStr: 100, tgtRot: Number(tgt.xf && where_for_opts() === 'xform' ? tgt.xf.rot : tgt.rot) || 0, scaleTrack: !!($('scTrack') && $('scTrack').checked), scaleStr: Math.max(0, num('scStr', 100)), tgtScale: Number(tgt.scale) || 100, place: ($('plc') ? $('plc').value : 'center'), gap: num('plcGap', 24)
+      offset: [num('offX', 0), num('offY', 0)], pin: [pct('pinX'), pct('pinY')], stats: {}, vis: visOffset(tgt), rotTrack: !posOnly() && !!($('rotTrack') && $('rotTrack').checked), rotStr: 100, tgtRot: Number(tgt.xf && where_for_opts() === 'xform' ? tgt.xf.rot : tgt.rot) || 0, scaleTrack: !posOnly() && !!($('scTrack') && $('scTrack').checked), scaleStr: Math.max(0, num('scStr', 100)), tgtScale: Number(tgt.scale) || 100, place: ($('plc') ? $('plc').value : 'center'), gap: num('plcGap', 24)
     };
   }
 
@@ -753,7 +901,10 @@
       o.zoom = z; $('zoom').value = z;
       if (!quiet) log('Otomatik zoom: %' + z);
     }
-    var pts = MaskParser.toPositions(t.points, o);
+    // v2.14.2-test.1 duzeltme: Position once YOGUN (tol=0) uretilir, dizi fps'ine oturtulur (rsq), SONRA seyreltilir (reduceKeys).
+    // Eskiden seyreltme resample'dan once yapiliyordu: seyrek listede ortanca aralik kare suresinden >%2 sapinca resampleToFrames basamakli (hold) uygulayip Position'i bozuyordu.
+    // Scale / Rotation (zAll / rAll) zaten yogun listeden gelir; degismez.
+    var pts = MaskParser.toPositions(t.points, Object.assign({}, o, { tol: 0 }));
     var TPS = MaskParser.TPS, sT = Number(tgt.startTicks), eT = Number(tgt.endTicks);
     var ft = Number(tgt.frameTicks), off = $('ref').value === 'inpoint' ? tgt.inSec : 0;
     // zamani kareye oturt, ayni kareye dusenleri tekle
@@ -770,9 +921,11 @@
       Object.keys(byFrame).map(Number).sort(function (a, b) { return a - b; }).forEach(function (k) { list.push(byFrame[k]); });
       return list;
     }
-    var list = toFrames(pts, function (p, sec) { return { sec: sec, x: p.x, y: p.y, tl: p.tl }; });
-    var zlist = pts.zAll ? MaskParser.reduceScalar(toFrames(pts.zAll, function (p, sec) { return { sec: sec, z: p.z, tl: p.tl }; }), 0.1, 'z') : null;
-    var rlist = pts.rAll ? MaskParser.reduceScalar(toFrames(pts.rAll, function (p, sec) { return { sec: sec, z: p.z, tl: p.tl }; }), 0.15, 'z') : null;
+    // v2.16: klip fps'i ile dizi fps'i farkliysa (24 -> 25 / 30 / 60) egri TAM dizi kare zamanlarinda orneklenir (aksi halde her nokta en yakin kareye yazilip hiz duzensizlesir). Hiz esitse AYNEN.
+    function rsq(a) { return ft > 0 ? MaskParser.resampleToFrames(a, sT / TPS, ft / TPS) : a; }
+    var list = toFrames(MaskParser.reduceKeys(rsq(pts), o.tol, o.seqW, o.seqH), function (p, sec) { return { sec: sec, x: p.x, y: p.y, tl: p.tl }; });
+    var zlist = pts.zAll ? MaskParser.reduceScalar(toFrames(rsq(pts.zAll), function (p, sec) { return { sec: sec, z: p.z, tl: p.tl }; }), 0.1, 'z') : null;
+    var rlist = pts.rAll ? MaskParser.reduceScalar(toFrames(rsq(pts.rAll), function (p, sec) { return { sec: sec, z: p.z, tl: p.tl }; }), 0.15, 'z') : null;
     return { list: list, zlist: zlist, rlist: rlist, seqW: tgt.seqW, seqH: tgt.seqH, zoom: o.zoom, stats: o.stats, track: t, o: o };
   }
 
@@ -878,6 +1031,7 @@
     if (!live && r.o.place && r.o.place !== 'center' && r.o.mode === 'snap' && !r.track.points.every(function (p) { return p.bn; })) log('Bilgi: Yerleşim (üst/alt/sol/sağ) yalnız Object Mask kutusu olan takipte çalışır; bu takipte merkez kullanıldı.');
     if (!live && !follow && r.o.scaleTrack && r.stats.sizeMissing) log('UYARI: Bu takip verisinde boyut bilgisi yok; Scale takibi yapılmadı (yalnız konum).');
     if (!live && !follow && sct && tgt.uniform === false) log('UYARI: Hedefte Uniform Scale kapalı; Scale yalnız yüksekliği değiştirir. Hedefte Motion > Uniform Scale\'i aç.');
+    if (follow && r.stats.clamped && r.stats.clamped >= Math.max(6, 0.05 * list.length)) log('UYARI: Nesne kenara yakın olduğu için ' + r.stats.clamped + ' / ' + list.length + ' karede kadraj kenar sınırına dayandı: nesne pin noktasına getirilemedi, kadraj yerinde duruyor / yalnız dikey oynuyor gibi görünür (takip verisi doğru olsa bile). Çözüm: "Nesne X / Y" konumunu nesnenin bulunduğu kenara kaydır ya da "En çok zoom"u artır.');
     var jumps = jumpCount(r);
     if (jumps) log('UYARI: ' + jumps + ' yerde ani sıçrama var (takip kopmuş olabilir). Yumuşatma artırmayı ya da nesneyi yeniden takip ettirmeyi dene.');
     var zoom = ((follow && !dyn && !keep) ? r.zoom : 0) * (xfc ? 100 / xfc.m : 1);   // keep: Scale'e dokunma
@@ -1142,5 +1296,62 @@
   $('mode').addEventListener('change', updateReady);
   updateReady(); renderDiag();
   window.MT = { st: st, compute: compute, previewTarget: previewTarget, save: saveSettings, touch: touch };
+  // ===== v2.16 (TEST): guncelleyici arayuzu. Hatalar paneli bozmaz. Otomatik kurulum acikken Premiere kapatilmaz: kurulumdan sonra panel kendini yeniler (calisma varsa kullanici onayi beklenir). =====
+  (function () {
+    var U = window.TetherUpdater, upd = null, last = null, busy = false;
+    try { if (U) upd = U.create({}); } catch (e) { upd = null; }
+    function um(t, lvl) { var m = $('updMsg'); if (m) { m.textContent = t; m.style.color = lvl === 'err' ? 'var(--er)' : (lvl === 'ok' ? 'var(--ok)' : (lvl === 'warn' ? 'var(--wn)' : '')); } }
+    // Ustteki ince bar: tek yer, tek mesaj. pct: 0-100 ya da null (ilerleme cizgisi yok). btn: {t, f} ya da null.
+    function bar(t, pct, btn) {
+      var b = $('updBar'); if (!b) return; if (t == null) { b.classList.add('hidden'); return; }
+      b.classList.remove('hidden'); $('updBarTxt').textContent = t; $('updBarPct').textContent = pct == null ? '' : '%' + Math.round(pct); $('updBarFill').style.width = (pct == null ? 0 : pct) + '%';
+      var bb = $('updBarBtn'); bb.classList.toggle('hidden', !btn); if (btn) { bb.textContent = btn.t; bb.onclick = btn.f; }
+    }
+    var bt = window.TetherUpdaterBoot;
+    if (bt && bt.message) { um(bt.message, 'warn'); log('UYARI: Güncelleyici: ' + bt.message); bar(bt.message, null, { t: 'Tamam', f: function () { bar(null); } }); }
+    window.__tetherMarkHealthy = function () { try { if (upd) upd.markHealthy(); else if (U) U.create({}).markHealthy(); } catch (e) {} };
+    if (!upd) { um('Güncelleyici yüklenemedi (panelin diğer özellikleri çalışır).', 'err'); return; }
+    function idle() { return !own.running && !own.frames && !own.rect && !(st.tracks && st.tracks.length) && !st.busy; }   // kutu cizilmis / kare yuklenmis / takip varsa panel kendiliginden YENILENMEZ (calisma kaybi ve beyaz ekran olmasin)
+    // Kurulumdan sonra: host.jsx yeniden yuklenir (ExtendScript tarafi yeni kodla calissin), sonra panel kendini yeniler; Premiere kapanmaz.
+    async function reloadPanel() {
+      bar('Panel yenileniyor…', 100);
+      try { await ev("$.evalFile('" + extDir().replace(/\\/g, '/').replace(/'/g, "\\'") + "/jsx/host.jsx')"); } catch (e) {}
+      setTimeout(function () { location.reload(); }, 600);
+    }
+    async function install(r) {
+      if (busy2) return; busy2 = true;
+      try {
+        bar('Yeni sürüm v' + r.latest + ' indiriliyor…', 0);
+        var d = await upd.downloadAndVerify(r, function (g, t) { bar('Yeni sürüm v' + r.latest + ' indiriliyor…', t ? Math.min(90, 90 * g / t) : null); });
+        if (!d.ok) { bar('Güncelleme kurulmadı: ' + d.message, null, { t: 'Tamam', f: function () { bar(null); } }); log('Güncelleyici: ' + d.code + ': ' + d.message); return; }
+        bar('Doğrulandı, kuruluyor…', 95);
+        var r2 = upd.install(d.files, extDir(), PLUGIN_VERSION, r.latest);
+        if (!r2.ok) { bar('Güncelleme kurulmadı: ' + r2.message, null, { t: 'Tamam', f: function () { bar(null); } }); log('Güncelleyici: ' + r2.message); return; }
+        log('Güncelleyici: v' + r.latest + ' kuruldu (' + r2.written + ' dosya). Yedek: ' + r2.backupDir); um('v' + r.latest + ' kuruldu.', 'ok');
+        if (idle()) await reloadPanel();
+        else bar('v' + r.latest + ' kuruldu. Çalışmanı kaybetmemen için panel henüz yenilenmedi.', 100, { t: 'Şimdi yenile', f: reloadPanel });
+      } catch (e) { bar('Güncelleme hatası: ' + (e && e.message || e), null, { t: 'Tamam', f: function () { bar(null); } }); } finally { busy2 = false; }
+    }
+    var busy2 = false;
+    async function check(silent) {
+      if (busy) return; busy = true; var b = $('bUpdCheck'); if (b) b.disabled = true; if (!silent) um('Denetleniyor…');
+      try {
+        var r = await upd.checkLatest(PLUGIN_VERSION); last = r;
+        if (r.state === 'uptodate') um('Güncel: v' + PLUGIN_VERSION + ' (en son sürüm).', 'ok');
+        else if (r.state === 'available') {
+          log('Güncelleyici: yeni sürüm v' + r.latest + (r.canInstall ? ' kurulabilir.' : ' kurulamaz: ' + r.reason));
+          if (!r.canInstall) um('Yeni sürüm var: v' + r.latest + '. Kurulamıyor: ' + r.reason, 'err');
+          else if (ac && ac.checked) { um('Yeni sürüm v' + r.latest + ' kuruluyor…', 'warn'); install(r); }
+          else { um('Yeni sürüm var: v' + r.latest, 'warn'); bar('Yeni sürüm var: v' + r.latest, null, { t: 'Güncelle', f: function () { install(r); } }); }
+        } else { if (!silent) um('Denetim başarısız: ' + r.message, 'err'); log('Güncelleyici: denetim başarısız (' + r.code + '): ' + r.message); }
+      } catch (e) { if (!silent) um('Denetim hatası: ' + (e && e.message || e), 'err'); }
+      finally { busy = false; if (b) b.disabled = false; }
+    }
+    var ac = $('updAuto');
+    $('bUpdCheck') && ($('bUpdCheck').onclick = function () { check(false); });
+    try { if (ac) { ac.checked = upd.readState().autoCheck !== false; ac.onchange = function () { upd.setAutoCheck(ac.checked); }; } } catch (e) {}
+    try { if (upd.shouldAutoCheck(24)) setTimeout(function () { check(true); }, 3000); } catch (e) {}
+  })();
   log('Hazır. Tether v' + PLUGIN_VERSION + (OM ? '' : ' (Object Mask modülü yüklenemedi; diğer özellikler çalışır)'));
+  try { if (window.__tetherMarkHealthy) window.__tetherMarkHealthy(); } catch (e) {}   // v2.15: main.js hatasiz sonuna kadar calistiysa acilis sagliklidir (erken kapatma yanlis geri almaya yol acmasin)
 })();

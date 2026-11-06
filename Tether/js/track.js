@@ -31,7 +31,8 @@
     var t = (r.stderr || '') + (r.stdout || ''), m = /Video:.*?,\s*(\d{2,5})x(\d{2,5})/.exec(t);
     if (!m) return null;
     var rot = /rotate\s*:\s*(-?\d+)/.exec(t);
-    return { w: +m[1], h: +m[2], rotate: rot ? +rot[1] : 0 };
+    var vl = /Video:[^\n]*/.exec(t), fm = vl ? /(\d+(?:\.\d+)?)\s*fps/.exec(vl[0]) : null, nf = fm ? +fm[1] : 0;   // v2.16: klibin kendi kare hizi (ortalama)
+    return { w: +m[1], h: +m[2], rotate: rot ? +rot[1] : 0, fps: (nf >= 5 && nf <= 240) ? nf : 0 };
   }
   /* Bir araligi gri ham kareler olarak okur. cb(err, {frames:[Uint8Array], w, h}) */
   function readFrames(ffmpeg, file, t0, dur, fps, W, H, cb, onProg, signal) {
@@ -349,6 +350,26 @@
     var srt = d.slice(1).sort(function (x, y) { return x - y; }), med = srt.length ? srt[srt.length >> 1] : 0, thr = Math.max(12, 4 * med);
     return d.map(function (v) { return v > thr; });
   }
+  /* v2.14 Adim 2A: yalnizca kullaniciya gosterilen sahne kesmesi NOTLARI icin. Takip (tplGen) bunu KULLANMAZ; tplGen eski detectCuts'i kullanmaya devam eder.
+     Kural: detectCuts ile ayni global kosul + kare 8x8 hucreye bolunur, hucrelerin en az %90'i ayni esigi asmali (kamyon gecisi gibi kismi hareket kesme sayilmaz).
+     Esik degerleri detectCuts ile ayni: max(12, 4*medyan). */
+  var STRICT = { grid: 8, minFrac: 0.9 };
+  function cutThreshold(d) { var srt = d.slice(1).sort(function (x, y) { return x - y; }), med = srt.length ? srt[srt.length >> 1] : 0; return Math.max(12, 4 * med); }
+  function cutSignals(frames, w, h) {   // d[i]: i-1 -> i ortalama mutlak fark (detectCuts ile ayni ornekleme); cells(i): aday kare icin 64 hucre ortalamasi
+    var n = frames.length, d = new Array(n).fill(0), i, p, s, c, a, b, G = STRICT.grid, cw = Math.max(1, Math.floor(w / G)), ch = Math.max(1, Math.floor(h / G));
+    for (i = 1; i < n; i++) { a = frames[i]; b = frames[i - 1]; s = 0; c = 0; for (p = 0; p < a.length; p += 7) { s += Math.abs(a[p] - b[p]); c++; } d[i] = s / Math.max(1, c); }
+    function cells(i) {
+      var a = frames[i], b = frames[i - 1], cs = new Array(G * G).fill(0), cn = new Array(G * G).fill(0), x, y, k, o;
+      for (y = 0; y < h; y += 2) { var gy = Math.min(G - 1, Math.floor(y / ch)); for (x = 0; x < w; x += 2) { k = gy * G + Math.min(G - 1, Math.floor(x / cw)); o = y * w + x; cs[k] += Math.abs(a[o] - b[o]); cn[k]++; } }
+      return cs.map(function (v, k) { return v / Math.max(1, cn[k]); });
+    }
+    return { d: d, cells: cells };
+  }
+  function strictFromSignals(d, cellsOf) {   // cellsOf(i) -> 64 hucre ortalamasi (yalnizca d[i] esigi astiginda cagrilir)
+    var thr = cutThreshold(d);
+    return d.map(function (v, i) { if (!(v > thr)) return false; var cs = cellsOf(i), c = 0, k; for (k = 0; k < cs.length; k++) if (cs[k] > thr) c++; return c / cs.length >= STRICT.minFrac; });
+  }
+  function detectCutsStrict(frames, w, h) { var sg = cutSignals(frames, w, h); return strictFromSignals(sg.d, sg.cells); }
   function* tplGen(frames, w, h, refIdx, rect, opts) {
     var dirs = opts.dir || 'both', total = frames.length, done = 0, out = new Array(total), relaxed = !!opts.relaxed, outScale = opts.model !== 'trans';
     var bw = Math.max(8, rect[2] * w), bh = Math.max(8, rect[3] * h), cx0 = (rect[0] + rect[2] / 2) * w, cy0 = (rect[1] + rect[3] / 2) * h, TC = opts.tplCrop || 0.7, tbw = Math.max(8, bw * TC), tbh = Math.max(8, bh * TC), m = Math.min(tbw, tbh);
@@ -950,6 +971,30 @@
     return { frames: out, lostFwd: lk.lostFwd, lostBwd: lk.lostBwd, reasonFwd: lk.reasonFwd, reasonBwd: lk.reasonBwd, refIdx: lk.refIdx, w: lk.w, h: lk.h, stats: lk.stats, filled: filled };
   }
 
+  /* v2.14 Adim 1: "Otomatik" yontemde nokta (lk) ve sablon (tp) sonuclarindan hangisinin kullanilacagina karar verir.
+   * Sablon, yalnizca daha cok kare izledi diye nokta sonucunun yerine KONMAZ: once ikisinin ORTAK karelerdeki farki olculur.
+   * lk, tp: trackRegion sonuclari. o.boxW / o.boxH: takip kutusu (kare piksel koordinatinda). Yalniz "wholesale" durumunda
+   * (nokta takibi karelerin yarisindan azini izlediginde) cagrilir; nokta takibi iyiyse (Video 1 yolu) bu fonksiyon hic calismaz.
+   * mode: 'template' = nokta takibi yargilanamayacak kadar az kare izledi (dogrulanamadi), sablon sonucu kullanilir (eski davranis);
+   *       'fill'     = ikisi ortak karelerde uyumlu: nokta kareleri AYNEN kalir, bos kareler sablonla doldurulur (zayif isaretli);
+   *       'points'   = ikisi celisiyor: nokta sonucu korunur, sablon kullanilmaz (tahmin yok, uyari verilir). */
+  var PICK = { minOverlap: 10, tau: 0.25, maxBad: 0.10 };
+  function autoPick(lk, tp, o) {
+    o = o || {};
+    var n = lk.frames.length, size = Math.sqrt(Math.max(1, (o.boxW || 1) * (o.boxH || 1))), tau = (o.tau || PICK.tau) * size, ov = 0, bad = 0, ds = [], i, a, b;
+    var okN = 0, okT = 0;
+    for (i = 0; i < n; i++) {
+      a = lk.frames[i]; b = tp.frames[i];
+      if (a) okN++; if (b) okT++;
+      if (a && b) { var d = Math.hypot(a.cx - b.cx, a.cy - b.cy); ds.push(d); ov++; if (d > tau) bad++; }
+    }
+    ds.sort(function (x, y) { return x - y; });
+    var info = { okN: okN, okT: okT, overlap: ov, bad: bad, badFrac: ov ? bad / ov : 0, medianPx: ov ? ds[Math.floor(ov / 2)] : 0, tauPx: tau, sizePx: size };
+    if (ov < (o.minOverlap || PICK.minOverlap)) { info.mode = 'template'; info.res = tp; info.verified = false; return info; }
+    if (info.badFrac > (o.maxBad === undefined ? PICK.maxBad : o.maxBad)) { info.mode = 'points'; info.res = lk; return info; }
+    var f = fillGaps(lk, tp); info.mode = 'fill'; info.res = f; info.filled = f.filled; return info;
+  }
+
   /* Takip sonucunu Tether nokta bicimine cevirir. res: trackRegion sonucu; tickOf(i) -> kaynak tick */
   function toPoints(res, tickOf) {
     var w = res.w, h = res.h, pts = [];
@@ -991,7 +1036,366 @@
     return [x0, y0, x1 - x0, y1 - y0];
   }
 
-  var api = { setDebug: function (f) { DBG = f; }, rectHit: rectHit, rectApply: rectApply, findFfmpeg: findFfmpeg, probe: probe, readFrames: readFrames, readOneFramePng: readOneFramePng, trackRegion: trackRegion, trackRegionAsync: trackRegionAsync, mergeResults: mergeResults, fillGaps: fillGaps, detectCuts: detectCuts, toPoints: toPoints, _lk: lkPyr, _pyramid: pyramid, trackSmall: trackSmall };
+  /* ---------------- v2.14: hedef dogrulama UYARISI (YALNIZ uyari; salt-okunur) ----------------
+   * Takip BITTIKTEN SONRA sonucu analiz eder; takip sonucunu, kareleri, koordinatlari, guven puanlarini DEGISTIRMEZ, hedefi duzeltmez / yeniden bulmaz.
+   * Sinyaller: A = kutu icerigi ilk (referans) karedeki gorunumden uzak (ilk saniyedeki en yuksek benzerlige gore); B (DENEYSEL) = kutu konumu ve icerigi arka plan kadar durgun.
+   * Tum sayilar DENEMELIKTIR: olculmus / dogrulanmis esik degildir. Hicbir donem "hedef kayboldu" kaniti degildir; yalniz "kontrol et" uyarisidir.
+   * B tek basina yalniz "kontrol" seviyesi uretir (hareketsiz kisi testi YAPILMADI); A ve B ayni donemde surerse "yuksek" supheli. */
+  var VT = { fps: 25, patchCrop: 0.7, localR: 4, bgStep: 4, A: { mode: 'rel', absLimit: 0.5, relRatio: 0.5, relBaseSec: 1.0, relStat: 'max' }, B: { enabled: true, spdLimit: 0.002, relBgRatio: 1.5 }, windowSec: 0.6, persistSec: 0.5, gapSec: 0.2, skipWeakBelow: 0, cuts: [], anchors: {} };
+  function vtMerge(a, b) { var o = {}, k; for (k in a) o[k] = a[k]; for (k in (b || {})) if (b[k] !== undefined) o[k] = (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k]) && a[k] && typeof a[k] === 'object') ? vtMerge(a[k], b[k]) : b[k]; return o; }
+  function vtPatch(img, w, h, cx, cy, tw, th) {
+    var p = new Float32Array(tw * th), m = 0, x, y, v2 = 0;
+    for (y = 0; y < th; y++) for (x = 0; x < tw; x++) { var px = Math.round(cx - tw / 2) + x, py = Math.round(cy - th / 2) + y, v = (px < 0 || py < 0 || px >= w || py >= h) ? 0 : img[py * w + px]; p[y * tw + x] = v; m += v; }
+    m /= p.length; for (x = 0; x < p.length; x++) { p[x] -= m; v2 += p[x] * p[x]; }
+    return { t: p, m: m, v: v2, sd: Math.sqrt(v2 / p.length), tw: tw, th: th };
+  }
+  function vtZncc(img, w, h, tp, x0, y0) {   // saf ZNCC; pencere disinda null
+    var tw = tp.tw, th = tp.th, n = tw * th, s = 0, q = 0, num = 0, ti = 0, x, y;
+    if (x0 < 0 || y0 < 0 || x0 + tw > w || y0 + th > h) return null;
+    for (y = 0; y < th; y++) { var row = (y0 + y) * w + x0; for (x = 0; x < tw; x++, ti++) { var v = img[row + x]; s += v; q += v * v; num += tp.t[ti] * v; } }
+    var vI = q - s * s / n; if (vI < 1e-3 * n || tp.v < 1e-3) return -1; return num / Math.sqrt(vI * tp.v);
+  }
+  function vtLocal(img, w, h, tp, cx, cy, R) {
+    var best = -2, bx = Math.round(cx - tp.tw / 2), by = Math.round(cy - tp.th / 2), dx, dy;
+    for (dy = -R; dy <= R; dy++) for (dx = -R; dx <= R; dx++) { var z = vtZncc(img, w, h, tp, bx + dx, by + dy); if (z !== null && z > best) best = z; }
+    return best;
+  }
+  function vtHalf(img, w, h) { var w2 = w >> 1, h2 = h >> 1, o = new Float32Array(w2 * h2), x, y; for (y = 0; y < h2; y++) for (x = 0; x < w2; x++) o[y * w2 + x] = (img[2 * y * w + 2 * x] + img[2 * y * w + 2 * x + 1] + img[(2 * y + 1) * w + 2 * x] + img[(2 * y + 1) * w + 2 * x + 1]) / 4; return { d: o, w: w2, h: h2 }; }
+  function* vtFeatures(res, frames, w, h, refIdx, rect, o) {
+    var bw = Math.max(8, rect[2] * w), bh = Math.max(8, rect[3] * h), tw = Math.max(8, Math.round(bw * o.patchCrop)), th = Math.max(8, Math.round(bh * o.patchCrop));
+    var cx0 = (rect[0] + rect[2] / 2) * w, cy0 = (rect[1] + rect[3] / 2) * h, tp = vtPatch(frames[refIdx], w, h, cx0, cy0, tw, th);
+    var out = { rows: [], refFlat: tp.sd < 3, box: [bw, bh] }, fr = res.frames, n = fr.length, bgCache = null, i, k;
+    var bwh = Math.max(6, tw >> 1), bhh = Math.max(6, th >> 1), stp = Math.max(bhh, 12), stpx = Math.max(bwh, 12);
+    for (i = 0; i < n; i++) {
+      var f = fr[i]; if (!f) continue;
+      if (i % 4 === 0) yield i;
+      var row = { i: i, cx: f.cx, cy: f.cy, conf: f.conf, ref: vtLocal(frames[i], w, h, tp, f.cx, f.cy, o.localR), dchg: null, bgChg: null };
+      var nb = (fr[i - 1] ? i - 1 : (fr[i + 1] ? i + 1 : -1));
+      if (nb >= 0) { var cur = vtPatch(frames[i], w, h, f.cx, f.cy, tw, th), g = fr[nb], pb = vtPatch(frames[nb], w, h, g.cx, g.cy, tw, th), s = 0; for (k = 0; k < cur.t.length; k++) s += Math.abs((cur.t[k] + cur.m) - (pb.t[k] + pb.m)); row.dchg = s / cur.t.length; }
+      if (o.bgStep && (i % o.bgStep === 0 || bgCache === null)) {   // arka plan degisimi: kutu boyutunda yamalarin onceki kareye gore ortanca farki (yarim cozunurluk)
+        var bgChg = null;
+        if (nb >= 0) {
+          var hi = vtHalf(frames[i], w, h), hp = vtHalf(frames[nb], w, h), ds = [], x0, y0, x, y;
+          for (y0 = 0; y0 + bhh <= hi.h; y0 += stp) for (x0 = 0; x0 + bwh <= hi.w; x0 += stpx) { var s2 = 0; for (y = 0; y < bhh; y += 2) for (x = 0; x < bwh; x += 2) s2 += Math.abs(hi.d[(y0 + y) * hi.w + x0 + x] - hp.d[(y0 + y) * hp.w + x0 + x]); ds.push(s2 / (Math.ceil(bhh / 2) * Math.ceil(bwh / 2))); }
+          ds.sort(function (a, b) { return a - b; }); bgChg = ds.length ? ds[ds.length >> 1] : null;
+        }
+        bgCache = { bgChg: bgChg };
+      }
+      if (bgCache) row.bgChg = bgCache.bgChg;
+      out.rows.push(row);
+    }
+    return out;
+  }
+  function vtWindow(rows, o, boxMax) {
+    var W = Math.max(3, Math.round(o.windowSec * o.fps)), by = {}, out = [], r, j;
+    for (j = 0; j < rows.length; j++) by[rows[j].i] = rows[j];
+    function med(a) { var x = a.filter(function (v) { return v !== null && v !== undefined; }).sort(function (p, q) { return p - q; }); return x.length ? x[x.length >> 1] : null; }
+    for (j = 0; j < rows.length; j++) {
+      r = rows[j]; var w = [], k; for (k = r.i - W; k <= r.i; k++) if (by[k]) w.push(by[k]);
+      if (w.length < Math.max(3, Math.round(W * 0.6))) { out.push({ i: r.i, ref: r.ref, spd: null, dchgW: null, bgChgW: null }); continue; }
+      var a = w[0], b = w[w.length - 1], span = Math.max(1, b.i - a.i);
+      out.push({ i: r.i, ref: r.ref, spd: Math.hypot(b.cx - a.cx, b.cy - a.cy) / span / Math.max(1, boxMax), dchgW: med(w.map(function (x) { return x.dchg; })), bgChgW: med(w.map(function (x) { return x.bgChg; })) });
+    }
+    return out;
+  }
+  function vtBuild(rowsIn, cfg) {   // saf mantik: ozellik satirlarindan donemler
+    var o = vtMerge(VT, cfg || {}), rows = rowsIn.filter(function (r) { return !(o.skipWeakBelow > 0 && r.conf < o.skipWeakBelow) && !(o.anchors && o.anchors[r.i]); }), cutSet = {}, kk;
+    (o.cuts || []).forEach(function (c) { for (var q = -Math.round(0.3 * o.fps); q <= Math.round(0.3 * o.fps); q++) cutSet[c + q] = true; });
+    rows = rows.filter(function (r) { return !cutSet[r.i]; });
+    var F = vtWindow(rows, o, o.boxMax || 1), bl = null;
+    if (o.A.mode === 'rel') {   // kosunun kendi baslangic davranisi: ref karesinden uzaklasirken ilk relBaseSec saniyedeki en yuksek (veya medyan) benzerlik
+      var m = Math.max(3, Math.round(o.A.relBaseSec * o.fps)), pos = rows.filter(function (r) { return r.i > o.refIdx; }).slice(0, m).map(function (r) { return r.ref; }), neg = rows.filter(function (r) { return r.i < o.refIdx; }).slice(-m).map(function (r) { return r.ref; });
+      var st = function (a) { var x = a.slice().sort(function (p, q) { return p - q; }); return x.length ? (o.A.relStat === 'max' ? x[x.length - 1] : x[x.length >> 1]) : null; };
+      bl = { fwd: st(pos), bwd: st(neg) };
+    }
+    function flagA(r) {
+      if (o.refFlat) return false;
+      if (o.A.mode === 'abs') return r.ref < o.A.absLimit;
+      if (o.A.mode === 'rel') { var b = r.i >= o.refIdx ? bl.fwd : bl.bwd; return b !== null && r.ref < o.A.relRatio * b; }
+      return false;
+    }
+    function flagB(r) { if (!o.B.enabled || r.spd === null || r.dchgW === null) return false; return r.spd < o.B.spdLimit && r.bgChgW !== null && r.dchgW < o.B.relBgRatio * Math.max(r.bgChgW, 0.3); }
+    var flags = F.map(function (r) { return { i: r.i, A: flagA(r), B: flagB(r) }; });
+    var minLen = Math.max(1, Math.round(o.persistSec * o.fps)), gap = Math.round(o.gapSec * o.fps);
+    function runs(key) {   // izlenen kareler uzerinde: en fazla `gap` kare normal kalmasina izin veren kesintisiz diziler, en az minLen kare
+      var out = [], cur = null, miss = 0, q;
+      for (q = 0; q < flags.length; q++) {
+        var f = flags[q];
+        if (f[key]) { if (!cur) cur = { from: f.i, to: f.i, n: 1 }; else { cur.to = f.i; cur.n++; } miss = 0; }
+        else if (cur) { miss++; if (miss > gap) { if (cur.n >= minLen) out.push(cur); cur = null; miss = 0; } }
+      }
+      if (cur && cur.n >= minLen) out.push(cur); return out;
+    }
+    var ra = runs('A'), rb = runs('B'), eps = [];
+    ra.forEach(function (e) { eps.push({ from: e.from, to: e.to, n: e.n, signal: 'A', level: 'kontrol', experimental: false }); });
+    rb.forEach(function (e) { eps.push({ from: e.from, to: e.to, n: e.n, signal: 'B', level: 'kontrol', experimental: true }); });   // B tek basina yalniz "kontrol"
+    ra.forEach(function (a) { rb.forEach(function (b) { var lo = Math.max(a.from, b.from), hi = Math.min(a.to, b.to); if (lo <= hi) eps.push({ from: lo, to: hi, n: hi - lo + 1, signal: 'A+B', level: 'yuksek', experimental: true }); }); });
+    eps.sort(function (p, q) { return p.from - q.from || (p.signal < q.signal ? -1 : (p.signal > q.signal ? 1 : 0)); });
+    return { episodes: eps, flags: flags };
+  }
+  function* vtGen(res, frames, w, h, refIdx, rect, opts) {
+    var o = vtMerge(VT, opts), feat = yield* vtFeatures(res, frames, w, h, refIdx, rect, o), notes = [];
+    if (feat.refFlat) notes.push('referans kutu icinde ayirt edici doku yok: hedef dogrulamasi yapilamadi (A devre disi)');
+    var be = vtBuild(feat.rows, vtMerge(o, { refIdx: refIdx, refFlat: feat.refFlat, boxMax: Math.max(feat.box[0], feat.box[1]) }));
+    return { episodes: be.episodes, rows: feat.rows, notes: notes };
+  }
+  function verifyTarget(res, frames, w, h, refIdx, rect, opts) { var g = vtGen(res, frames, w, h, refIdx, rect, opts), r; do { r = g.next(); } while (!r.done); return r.value; }
+  function verifyTargetAsync(res, frames, w, h, refIdx, rect, opts) {   // UI donmasin: parca parca (25 ms dilimler)
+    return new Promise(function (resolve, reject) {
+      var g; try { g = vtGen(res, frames, w, h, refIdx, rect, opts); } catch (e) { return reject(e); }
+      function tick() { var t0 = Date.now(), r; try { do { r = g.next(); } while (!r.done && Date.now() - t0 < 25); } catch (e) { return reject(e); } if (r.done) resolve(r.value); else setTimeout(tick, 0); }
+      tick();
+    });
+  }
+
+  /* ===== v2.15: dogrulamali aday secimi (improveTrack) + sabit kamera on plan izleyici (fgTrack) =====
+   * Yalniz dogrulama (verifyTarget) supheli donem bulursa calisir; supheli donem yoksa sonuc BIREBIR ayni kalir (Video 1).
+   * Adaylar gercek goruntu kanitina dayanir; konum uydurulmaz. Aday ancak belirgin sekilde daha az supheli / kayip kare uretirse alinir.
+   * Korunan motor fonksiyonlarina (trackGen, tplGen, ...) dokunulmaz; yalniz trackRegionAsync cagrilir. */
+  var FG = { thr: 18, minMaskPx: 20, minScore: 0.3, maxLost: 6, staticShare: 0.15, staticRatio: 1.0, bgSamples: 31, minScene: 12 };
+
+  function fgSceneBounds(n, refIdx, cuts) {            // cuts: kesme olan (yeni sahnenin ilk) kare indeksleri
+    var a = 0, b = n - 1, k;
+    for (k = 0; k < (cuts || []).length; k++) { var c = cuts[k]; if (c <= refIdx && c > a) a = c; if (c > refIdx && c - 1 < b) b = c - 1; }
+    return [a, b];
+  }
+  function* fgBackground(frames, w, h, a, b) {         // sahne icin pikselbasina zamansal medyan (kamera sabitse arka plan); satir gruplari arasinda yield (UI donmasin)
+    var m = Math.min(FG.bgSamples, b - a + 1), idx = [], k, p, q, N = w * h, bg = new Uint8Array(N), tmp = new Uint8Array(m), chunk = Math.max(1, Math.floor(60000 / Math.max(1, m)));
+    for (k = 0; k < m; k++) idx.push(a + Math.round(k * (b - a) / Math.max(1, m - 1)));
+    for (p = 0; p < N; p++) {
+      for (k = 0; k < m; k++) { var v = frames[idx[k]][p]; q = k - 1; while (q >= 0 && tmp[q] > v) { tmp[q + 1] = tmp[q]; q--; } tmp[q + 1] = v; }
+      bg[p] = tmp[m >> 1];
+      if (p % chunk === chunk - 1) yield 0;
+    }
+    return { bg: bg, idx: idx };
+  }
+  function fgIsStatic(frames, w, h, bgo) {             // kamera sabit mi? (1) medyan kareden >18 farkli piksel payi kucuk, (2) ortalama |fark| / ortalama yerel gradyan kucuk (kontrasttan bagimsiz; olculen: V3 0.13, V1 8.3, V2 13)
+    var shares = [], ratios = [], k, p, x, y, N = w * h, step = 3, g = 0, gn = 0, bg = bgo.bg;
+    for (y = 1; y < h - 1; y += 3) for (x = 1; x < w - 1; x += 3) { g += Math.abs(bg[y * w + x + 1] - bg[y * w + x - 1]) + Math.abs(bg[(y + 1) * w + x] - bg[(y - 1) * w + x]); gn += 2; }
+    g = Math.max(0.5, g / Math.max(1, gn));
+    for (k = 0; k < bgo.idx.length; k++) { var f = frames[bgo.idx[k]], c = 0, tot = 0, sd = 0; for (p = 0; p < N; p += step) { var d = Math.abs(f[p] - bg[p]); tot++; sd += d; if (d > FG.thr) c++; } shares.push(c / tot); ratios.push(sd / tot / g); }
+    shares.sort(function (a, b) { return a - b; }); ratios.sort(function (a, b) { return a - b; });
+    var ms = shares[shares.length >> 1], mr = ratios[ratios.length >> 1];
+    return { median: ms, ratio: mr, ok: ms < FG.staticShare && mr < FG.staticRatio };
+  }
+  function fgWz(cur, cw, tp, tm, bw, bh, x0, y0) {     // on plan agirlikli ZNCC
+    var sw = 0, sa = 0, sb = 0, x, y, i;
+    for (y = 0; y < bh; y++) { var ro = y * bw, co = (y0 + y) * cw + x0; for (x = 0; x < bw; x++) { if (tm[ro + x]) { sw++; sa += tp[ro + x]; sb += cur[co + x]; } } }
+    if (sw < FG.minMaskPx) return -1;
+    var ma = sa / sw, mb = sb / sw, saa = 0, sbb = 0, sab = 0;
+    for (y = 0; y < bh; y++) { var ro2 = y * bw, co2 = (y0 + y) * cw + x0; for (x = 0; x < bw; x++) { if (tm[ro2 + x]) { var a = tp[ro2 + x] - ma, b = cur[co2 + x] - mb; saa += a * a; sbb += b * b; sab += a * b; } } }
+    return saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : -1;
+  }
+  function* fgGen(frames, w, h, refIdx, rect, opts) {
+    opts = opts || {};
+    var n = frames.length, sc = opts.scene || [0, n - 1], a = sc[0], b = sc[1], out = new Array(n), i;
+    for (i = 0; i < n; i++) out[i] = null;
+    var res = { frames: out, lostFwd: null, lostBwd: null, refIdx: refIdx, w: w, h: h, method: 'fg' };
+    if (b - a + 1 < FG.minScene) { res.reason = 'sahne cok kisa'; return res; }
+    var bgo = yield* fgBackground(frames, w, h, a, b);
+    var st = fgIsStatic(frames, w, h, bgo); res.staticShare = st.median; res.staticRatio = st.ratio;
+    if (!st.ok) { res.reason = 'kamera sabit degil (arka plan modeli gecersiz; fark/gradyan ' + st.ratio.toFixed(2) + ')'; return res; }
+    var bg = bgo.bg, bw = Math.max(8, Math.round(rect[2] * w)), bh = Math.max(8, Math.round(rect[3] * h)), bx0 = Math.round(rect[0] * w), by0 = Math.round(rect[1] * h);
+    if (bx0 < 0 || by0 < 0 || bx0 + bw > w + 1 || by0 + bh > h + 1) { res.reason = 'kutu kare disinda'; return res; }
+    bx0 = Math.min(bx0, w - bw); by0 = Math.min(by0, h - bh);
+    var exact = [rect[0] * w, rect[1] * h];
+    function emit(t, dx, dy, s) { var x0 = exact[0] + dx, y0 = exact[1] + dy; return { i: t, poly: [[x0, y0], [x0 + bw, y0], [x0 + bw, y0 + bh], [x0, y0 + bh]], cx: x0 + bw / 2, cy: y0 + bh / 2, scale: 1, rot: 0, conf: Math.max(0.05, Math.min(1, s)) }; }
+    out[refIdx] = emit(refIdx, 0, 0, 1);
+    var Rx = Math.max(10, Math.min(36, Math.round(0.4 * bw))), Ry = Math.max(4, Math.min(12, Math.round(0.1 * bh)));
+    var tp = new Uint8Array(bw * bh), tm = new Uint8Array(bw * bh);
+    var dirs = opts.dir === 'fwd' ? [1] : (opts.dir === 'bwd' ? [-1] : [1, -1]), di;
+    for (di = 0; di < dirs.length; di++) {
+      var d = dirs[di], x0 = bx0, y0 = by0, vx = 0, vy = 0, lost = 0, t, tEnd = d > 0 ? b : a, prev = refIdx;
+      for (t = refIdx + d; d > 0 ? t <= tEnd : t >= tEnd; t += d) {
+        var P = frames[prev], x, y, cnt = 0;
+        for (y = 0; y < bh; y++) for (x = 0; x < bw; x++) { var o = (y0 + y) * w + x0 + x; tp[y * bw + x] = P[o]; var mv = Math.abs(P[o] - bg[o]) > FG.thr ? 1 : 0; tm[y * bw + x] = mv; cnt += mv; }
+        var best = -2, bxx = x0, byy = y0, px = Math.round(x0 + vx), py = Math.round(y0 + vy), sx, dx, dy, grid = {};
+        if (cnt >= FG.minMaskPx) {
+          for (dy = -Ry; dy <= Ry; dy++) for (dx = -Rx; dx <= Rx; dx++) { var xx = px + dx, yy = py + dy; if (xx < 0 || yy < 0 || xx + bw > w || yy + bh > h) continue; sx = fgWz(frames[t], w, tp, tm, bw, bh, xx, yy); grid[xx + ',' + yy] = sx; if (sx > best) { best = sx; bxx = xx; byy = yy; } }
+        }
+        if (best < FG.minScore) {                       // bu karede on plan bulunamadi: konum UYDURULMAZ, kare bos kalir
+          lost++; if (lost > FG.maxLost) { if (d > 0) res.lostFwd = t; else res.lostBwd = t; res.reason = 'on plan kayboldu'; break; }
+          vx *= 0.8; vy *= 0.8; prev = prev; if ((t - refIdx) % 40 === 0) yield 0; continue;
+        }
+        lost = 0;
+        var gl = grid[(bxx - 1) + ',' + byy], gr = grid[(bxx + 1) + ',' + byy], gu = grid[bxx + ',' + (byy - 1)], gd = grid[bxx + ',' + (byy + 1)], fx = 0, fy = 0;
+        if (gl !== undefined && gr !== undefined) { var dn = gl - 2 * best + gr; if (dn < -1e-6) fx = Math.max(-0.5, Math.min(0.5, 0.5 * (gl - gr) / dn)); }
+        if (gu !== undefined && gd !== undefined) { var dn2 = gu - 2 * best + gd; if (dn2 < -1e-6) fy = Math.max(-0.5, Math.min(0.5, 0.5 * (gu - gd) / dn2)); }
+        vx = 0.6 * vx + 0.4 * (bxx - x0); vy = 0.6 * vy + 0.4 * (byy - y0); x0 = bxx; y0 = byy;
+        out[t] = emit(t, x0 + fx - bx0, y0 + fy - by0, best);
+        prev = t;
+        if ((t - refIdx) % 20 === 0) yield 0;
+      }
+    }
+    return res;
+  }
+  function fgTrackAsync(frames, w, h, refIdx, rect, opts) {
+    return new Promise(function (resolve, reject) {
+      var g = fgGen(frames, w, h, refIdx, rect, opts);
+      function tick() { var t0 = Date.now(), r; try { do { if (opts && opts.cancel && opts.cancel()) { try { g.return(); } catch (e) {} return resolve(null); } r = g.next(); } while (!r.done && Date.now() - t0 < 25); } catch (e) { return reject(e); } if (r.done) resolve(r.value); else setTimeout(tick, 0); }
+      tick();
+    });
+  }
+  function vtSuspectCount(ver, n) {                      // supheli episode'larin kapsadigi benzersiz kare sayisi
+    var seen = {}, c = 0, k, i, e;
+    if (!ver || !ver.episodes) return 0;
+    for (k = 0; k < ver.episodes.length; k++) { e = ver.episodes[k]; for (i = Math.max(0, e.from); i <= Math.min(n - 1, e.to); i++) if (!seen[i]) { seen[i] = 1; c++; } }
+    return c;
+  }
+  function trackedCount(res) { var c = 0; res.frames.forEach(function (f) { if (f) c++; }); return c; }
+  /* Iki sonucu kare bazinda birlestir: ayni karede ikisi de varsa ve konumlari kutu boyunun %35'inden fazla ayriliyorsa, ayrisan ARDISIK kareler
+   * (en fazla 2 karelik bosluk toleransi) bir parca sayilir; parcada referansa benzerligi (ref) ortalamada belirgin (>0.05) yuksek olan sonuc alinir.
+   * Yalniz biri varsa o alinir. Her iki sonuc da gercek takip ciktisidir; konum uydurulmaz. */
+  function mergeByRef(res0, v0, cand, vc) {
+    var n = res0.frames.length, out = new Array(n), i, r0 = {}, rc = {};
+    (v0.rows || []).forEach(function (q) { r0[q.i] = q.ref; }); (vc.rows || []).forEach(function (q) { rc[q.i] = q.ref; });
+    function size(f) { var xs = f.poly.map(function (p) { return p[0]; }), ys = f.poly.map(function (p) { return p[1]; }); return Math.max(Math.max.apply(null, xs) - Math.min.apply(null, xs), Math.max.apply(null, ys) - Math.min.apply(null, ys)); }
+    var dis = new Array(n), takeC = new Array(n);
+    for (i = 0; i < n; i++) { var a = res0.frames[i], b = cand.frames[i]; takeC[i] = false; dis[i] = !!(a && b && Math.hypot(a.cx - b.cx, a.cy - b.cy) > 0.35 * size(a)); if (!a && b) takeC[i] = true; }
+    i = 0;
+    while (i < n) {
+      if (!dis[i]) { i++; continue; }
+      var s = i, e = i, gap = 0, j = i + 1;
+      while (j < n && gap <= 2) { if (dis[j]) { e = j; gap = 0; } else gap++; j++; }
+      var m0 = 0, mc = 0, c = 0, k;
+      for (k = s; k <= e; k++) if (res0.frames[k] && cand.frames[k] && r0[k] !== undefined && rc[k] !== undefined) { m0 += r0[k]; mc += rc[k]; c++; }
+      var pickC = c > 0 && (mc - m0) / c > 0.05;
+      for (k = s; k <= e; k++) takeC[k] = pickC && !!cand.frames[k];
+      i = e + 1;
+    }
+    for (i = 0; i < n; i++) out[i] = takeC[i] ? cand.frames[i] : (res0.frames[i] || null);
+    return Object.assign({}, res0, { frames: out });
+  }
+  /* res0: mevcut (otomatik akis) sonucu. Donus: { res, changed, auto, note, report, v, alt, orig }.
+   * KURAL (Video 1'i korumak icin): mevcut kareler YALNIZ su durumlarda degistirilir ("auto"):
+   *   (a) iki sinyalli (A+B) sabit kilit bulundu ve aday hareket ediyor (B yok); (b) cok kare BOS (>=%15): yalniz bos kareler adaydan doldurulur, mevcut kareler aynen kalir;
+   *   (c) supheli donem kliibin >=%50'sini kapsiyor ve aday belirgin daha iyi. Diger durumlarda daha iyi bir aday "alt" olarak HAZIRLANIR, ama uygulanmaz (kullanici onayi).
+   * Referans benzerligi (A) tek basina hakem degildir: Video 1'de farkli baslangic karelerinde A, dogru takibi supheli, yanlis adayi "daha iyi" gosterebildi (olculdu). */
+  async function improveTrackAsync(res0, frames, w, h, refIdx, rect, opts) {
+    opts = opts || {};
+    var n = frames.length, vopts = { fps: opts.fps, cuts: opts.cuts || [], anchors: opts.anchors || {} };
+    var v0 = await verifyTargetAsync(res0, frames, w, h, refIdx, rect, vopts);
+    var origHigh = v0.episodes.some(function (e) { return e.level === 'yuksek'; }), s0 = vtSuspectCount(v0, n), miss0 = n - trackedCount(res0), score0 = s0 + miss0, frac0 = s0 / n;
+    var report = { base: { suspect: s0, missing: miss0, score: score0, episodes: v0.episodes.length, high: origHigh, suspectFrac: +frac0.toFixed(2) }, cands: [] };
+    var none = { res: res0, changed: false, auto: false, note: '', report: report, v: v0, alt: null, orig: res0 };
+    var sc0 = fgSceneBounds(n, refIdx, opts.cuts), scN = sc0[1] - sc0[0] + 1, sceneEp = v0.episodes.filter(function (e) { return e.to >= sc0[0] && e.from <= sc0[1]; }), missSc = 0, qq;
+    for (qq = sc0[0]; qq <= sc0[1]; qq++) if (!res0.frames[qq]) missSc++;
+    var hasB0 = sceneEp.some(function (e) { return e.signal.indexOf('B') >= 0; }), needTpl = missSc >= 0.15 * scN;   // sablon adayi yalniz bos kare doldurmak icin (kendiliginden uygulanabilen tek sablon yolu);   // yalniz REFERANS SAHNESI sayilir: baska sahnelerdeki (kesme sonrasi) bos / sabit kareler yavas aramayi tetiklemesin;   // sablon adaylari yavas (dakikalar): yalniz kendiliginden uygulanabilecekse; yalniz-B durumunda sabit kamera on plan adayi (hizli) denenir
+    if ((!v0.episodes.length && miss0 < 0.15 * n) || (opts.cancel && opts.cancel())) return none;
+    var cands = [], stage = opts.onStage || function () {};
+    function runT(crop, p0, p1) { stage('Şablon adayı deneniyor', p0); var last = -1; return trackRegionAsync(frames, w, h, refIdx, rect, Object.assign({}, opts.base || {}, { method: 'tpl', tplCrop: crop, cancel: opts.cancel, onProgress: function (d, t) { var p = Math.round(p0 + (p1 - p0) * d / Math.max(1, t)); if (p !== last) { last = p; stage('Şablon adayı deneniyor', p); } } })); }   // yuzde: sablon 0-35, 35-70, on plan 70-90, degerlendirme 90-100
+    var t7 = needTpl ? await runT(0.7, 0, 35) : null; if (t7 && !t7.cancelled) cands.push({ name: 'şablon', kind: 'full', res: t7 });
+    var t1 = needTpl ? await runT(1, 35, 70) : null; if (t1 && !t1.cancelled) cands.push({ name: 'şablon (tam kutu)', kind: 'full', res: t1 });
+    stage('Sabit kamera ön plan adayı deneniyor', 70);
+    var fgr = await fgTrackAsync(frames, w, h, refIdx, rect, { scene: fgSceneBounds(n, refIdx, opts.cuts), cancel: opts.cancel });
+    report.fg = fgr ? { reason: fgr.reason || null, tracked: trackedCount(fgr), staticShare: fgr.staticShare } : null;
+    if (fgr && trackedCount(fgr) >= FG.minScene) {      // yalniz kendi sahnesinde; sahne disinda mevcut sonuc korunur
+      var sc = fgSceneBounds(n, refIdx, opts.cuts), merged = res0.frames.slice(), i;
+      for (i = sc[0]; i <= sc[1]; i++) merged[i] = fgr.frames[i] || null;
+      cands.push({ name: 'sabit kamera ön plan', kind: 'fg', res: Object.assign({}, res0, { frames: merged }) });
+    }
+    var tp = []; cands.forEach(function (c) { if (c.kind === 'full') tp.push(c); });
+    if (miss0 >= 0.15 * n) tp.forEach(function (c) {    // (b) yalniz bos kareleri doldur; mevcut kareler AYNEN
+      var fr = res0.frames.map(function (f, i) { return f || c.res.frames[i] || null; });
+      cands.push({ name: 'boşlukları ' + c.name + ' ile doldur', kind: 'fill', res: Object.assign({}, res0, { frames: fr }) });
+    });
+    // Degisim yalniz supheli donemlerde (+-0.5 sn pay) gecerli olsun; disindaki kareler ilk sonuctan AYNEN kalir (bos olanlar adaydan dolar). Supheli donem icinde aday bossa kare bos kalir (yanlis kilit konumu "izlendi" gibi gosterilmez).
+    var margin = Math.max(1, Math.round(0.5 * (opts.fps || 25))), span = new Array(n), q2;
+    v0.episodes.forEach(function (e) { for (q2 = Math.max(0, e.from - margin); q2 <= Math.min(n - 1, e.to + margin); q2++) span[q2] = true; });
+    function divergenceSpan(raw) {   // ilk sonuc ile aday kalici (>=6 kare, 2 kare bosluk toleransi) kutu boyunun %35'inden fazla ayriliyorsa o donem (+-pay) de degisim kapsamina girer (kilit, ilk supheli donemden once baslamis olabilir)
+      var bs = Math.max(rect[2] * w, rect[3] * h), out = new Array(n), i, run0 = -1, last = -1, gap = 0;
+      function close() { if (run0 >= 0 && last - run0 + 1 >= 6) for (var z = Math.max(0, run0 - margin); z <= Math.min(n - 1, last + margin); z++) out[z] = true; run0 = -1; last = -1; gap = 0; }
+      for (i = 0; i < n; i++) { var a1 = res0.frames[i], b1 = raw.frames[i], dv = !!(a1 && b1 && Math.hypot(a1.cx - b1.cx, a1.cy - b1.cy) > 0.35 * bs); if (dv) { if (run0 < 0) run0 = i; last = i; gap = 0; } else if (run0 >= 0) { if (++gap > 2) close(); } }
+      close(); return out;
+    }
+    cands.forEach(function (c) {
+      if (c.kind !== 'full' && c.kind !== 'fg') return;
+      var sp = span, dsp = (c.kind === 'fg' && (origHigh || v0.episodes.some(function (e) { return e.signal.indexOf('B') >= 0; }))) ? divergenceSpan(c.res) : null;
+      var fr2 = res0.frames.map(function (f, i) { return (sp[i] || (dsp && dsp[i])) ? (c.res.frames[i] || null) : (f || c.res.frames[i] || null); });
+      c.rawRes = c.res; c.res = Object.assign({}, res0, { frames: fr2 });
+    });
+    var k, evals = [];
+    async function evalCand(c) {
+      var v = await verifyTargetAsync(c.res, frames, w, h, refIdx, rect, vopts), s = vtSuspectCount(v, n), miss = n - trackedCount(c.res), mc = 0, mn = 0;
+      c.res.frames.forEach(function (f) { if (f) { mc += f.conf; mn++; } });
+      c.v = v; c.suspect = s; c.missing = miss; c.score = s + miss; c.high = v.episodes.some(function (e) { return e.level === 'yuksek'; });
+      c.hasB = v.episodes.some(function (e) { return e.signal.indexOf('B') >= 0; }); c.meanConf = mn ? mc / mn : 0;
+      report.cands.push({ name: c.name, kind: c.kind, suspect: s, missing: miss, score: c.score, high: c.high, hasB: c.hasB, meanConf: +c.meanConf.toFixed(2), episodes: v.episodes.length });
+      // uygun: yuksek suphe yok ve (>=%30 iyilesme ya da iki sinyalli sabit kilitte hareket eden, guveni >=0.6 ve skoru dusen aday)
+      c.ok = !c.high && (c.score <= 0.7 * score0 || (origHigh && !c.hasB && c.meanConf >= 0.6 && c.score < score0));
+      return c;
+    }
+    for (k = 0; k < cands.length; k++) { if (opts.cancel && opts.cancel()) break; stage('Adaylar karşılaştırılıyor', Math.round(90 + 10 * k / cands.length)); evals.push(await evalCand(cands[k])); }
+    var bt = null; cands.forEach(function (c) { if (c.kind === 'full' && !c.high && (!bt || c.score < bt.score)) bt = c; });
+    if (bt && bt.v && !(opts.cancel && opts.cancel())) {   // birlesik (kare bazinda ref benzerligi): yalniz ALTERNATIF olarak sunulur, kendiliginden uygulanmaz
+      var mres = mergeByRef(res0, v0, bt.res, bt.v), mc2 = { name: 'birleşik (ilk sonuç + ' + bt.name + ')', kind: 'merge', res: mres };
+      cands.push(mc2); evals.push(await evalCand(mc2));
+    }
+    if (opts.cancel && opts.cancel()) return none;   // iptal edildi: kismi degerlendirmeyle hicbir sey uygulanmaz
+    var elig = evals.filter(function (c) { return c.ok; }).sort(function (a, b) { return a.score - b.score; });
+    var best = elig[0] || null;
+    var fgAny = null; evals.forEach(function (c) { if (c.kind === 'fg' && !fgAny && !c.high) fgAny = c; });
+    if (!best && !fgAny) return none;
+    // sabit kamerada iki bagimsiz kanit: (1) ilk sonuc supheli donemde DONMUS (+-0.3 sn icinde kutu boyunun %5'inden az yer degistirmis), (2) on plan adayi ayni karelerde kutu boyunun >=%50'si kadar uzakta ve hareket ediyor
+    var frozenFg = false, fgc = fgAny;   // on plan adayi dogrulayici skoru (A/B) yuzunden elenmis olsa bile degerlendirilir: kendi kaniti var
+    if (fgc && v0.episodes.length) {
+      var bs = Math.max(rect[2] * w, rect[3] * h), dd = [], kk = Math.max(1, Math.round(0.3 * (opts.fps || 25)));
+      v0.episodes.forEach(function (e) { for (var q = e.from; q <= e.to; q++) { var a1 = res0.frames[q], b1 = fgc.rawRes.frames[q], p0 = res0.frames[Math.max(0, q - kk)], p1 = res0.frames[Math.min(n - 1, q + kk)]; if (!a1 || !b1 || !p0 || !p1) continue; if (Math.hypot(p1.cx - p0.cx, p1.cy - p0.cy) > 0.05 * bs) continue; dd.push(Math.hypot(a1.cx - b1.cx, a1.cy - b1.cy) / bs); } });
+      dd.sort(function (x, y) { return x - y; }); report.frozenVsFg = dd.length ? +dd[dd.length >> 1].toFixed(2) : null;
+      frozenFg = dd.length >= 6 && dd[dd.length >> 1] >= 0.5;
+    }
+    function autoOk(c) { return (c.kind === 'fg' && (origHigh || frozenFg)) || (!c.hasB && c.kind === 'fill'); }   // v2.16: on plan adayi icin B (deneysel, hareketsiz kutu) vetosu yok: kendi kaniti var (ilk sonuc sabit kilitli + hareketli on plan); 480/960 px'de gercek takibi B yanlis isaretliyordu   // v2.16: sablon adayi kendiliginden UYGULANMAZ (gercek V2 kullaniminda isinlanma / titreme uretti); yalniz alternatif olarak sunulabilir
+    var chosen = null; elig.forEach(function (c) { if (!chosen && autoOk(c)) chosen = c; });
+    if (!chosen && frozenFg && fgc) chosen = fgc;
+    if (chosen) {
+      var out = Object.assign({}, chosen.res, { improvedBy: chosen.name });
+      var why = chosen.kind === 'fill' ? 'çok sayıda boş kare vardı; yalnızca boş kareler dolduruldu' : ((origHigh || frozenFg) ? 'hedefin sabit bir yere kilitlendiği görüldü' : 'şüpheli dönem klibin yarısından fazlasını kapsıyordu');
+      return { res: out, changed: true, auto: true, note: ' (otomatik düzeltme: ' + why + '; "' + chosen.name + '" kullanıldı; "İlk takibe dön" ile geri alınabilir)', report: report, v: chosen.v, from: v0, alt: null, orig: res0 };
+    }
+    return { res: res0, changed: false, auto: false, note: '', report: report, v: v0, alt: best ? { res: Object.assign({}, best.res, { improvedBy: best.name }), name: best.name, v: best.v, score: best.score } : null, orig: res0 };
+  }
+
+  /* v2.16: sahne kesmesinden sonra, referans sahnesi DISINDA kalan ve kesintisiz izlenen >=3 karelik bir dizi piksel duzeyinde HIC hareket etmiyorsa (kutu merkezi yayilimi < 0.001 x kare genisligi)
+   * o dizi bos birakilir. Neden: kesmeden sonra nesne yoktur; takipci arka plana kilitlenir (guveni yuksek gorunur) ve bu kareler keyframe olup dogrusal gecisle nesneyi bir yerden digerine ucurur.
+   * Uydurma konum uretmez, yalniz siler. Kesme yoksa sonuc AYNEN doner. */
+  function dropFrozenAfterCuts(res, cuts, refIdx, w) {
+    var n = res.frames.length, cs = (cuts || []).filter(function (c) { return c > 0 && c < n; }).sort(function (a, b) { return a - b; }), dropped = 0, out = res.frames.slice(), i, k, a0 = 0, b0 = n - 1, tol = 0.001 * w;
+    if (!cs.length) return { res: res, dropped: 0 };
+    for (k = 0; k < cs.length; k++) { if (cs[k] <= refIdx) a0 = cs[k]; else { b0 = cs[k] - 1; break; } }   // referans sahnesi [a0, b0]
+    function cen(f) { return f.cx != null ? [f.cx, f.cy] : [(f.poly[0][0] + f.poly[2][0]) / 2, (f.poly[0][1] + f.poly[2][1]) / 2]; }
+    var inRef = function (q) { return q >= a0 && q <= b0; }, run0 = -1, q;   // run: birbirini izleyen, kare kareye < tol kayan izli kareler
+    function flush(end) { if (run0 >= 0 && end - run0 >= 3) for (var z = run0; z < end; z++) { out[z] = null; dropped++; } run0 = -1; }
+    for (i = 0; i <= n; i++) {
+      if (i < n && out[i] && !inRef(i)) {
+        if (run0 >= 0) { var c1 = cen(out[i - 1]), c2 = cen(out[i]); if (out[i - 1] && Math.abs(c1[0] - c2[0]) < tol && Math.abs(c1[1] - c2[1]) < tol) continue; flush(i); }
+        run0 = i;
+      } else flush(i);
+    }
+    return dropped ? { res: Object.assign({}, res, { frames: out }), dropped: dropped } : { res: res, dropped: 0 };
+  }
+  /* v2.16: iki izleme kaynagi birlesirken (ornegin nokta takibi kaybolunca sablon dolgusu) kutu bir karede kutu boyunun >%25'i kadar atlarsa bu "isinlanma"dir.
+   * Atlayis noktasindan itibaren sonraki K karede, yeni konuma eski konumdan azalan bir kayma ile gecilir (kutu sureklilik icin ilk karede eski yerinde kalir, K karede yeni yere varir).
+   * Gecis kareleri zayif guvenli (sari) isaretlenir. Atlayis yoksa sonuc AYNI nesne olarak doner. Bos (null) kareler atlayis sayilmaz. */
+  function smoothJumps(res, K, frac) {
+    var fr = res.frames, n = fr.length, out = null, i, q, cnt = 0; K = K || 12; frac = frac || 0.25;
+    function cen(f) { return f.cx != null ? [f.cx, f.cy] : [(f.poly[0][0] + f.poly[2][0]) / 2, (f.poly[0][1] + f.poly[2][1]) / 2]; }
+    function bsz(f) { var xs = f.poly.map(function (p) { return p[0]; }), ys = f.poly.map(function (p) { return p[1]; }); return Math.max(Math.max.apply(null, xs) - Math.min.apply(null, xs), Math.max.apply(null, ys) - Math.min.apply(null, ys)); }
+    for (i = 1; i < n; i++) {
+      var a = (out || fr)[i - 1], b = (out || fr)[i]; if (!a || !b || !a.poly || !b.poly) continue;
+      var ca = cen(a), cb = cen(b), jx = cb[0] - ca[0], jy = cb[1] - ca[1];
+      if (Math.hypot(jx, jy) <= frac * Math.min(bsz(a), bsz(b))) continue;
+      if (!out) out = fr.slice();
+      for (q = 0; q < K && i + q < n; q++) {
+        var f = out[i + q]; if (!f || !f.poly) break;
+        var w = 1 - q / K, dx = -jx * w, dy = -jy * w;   // q=0: eski konum
+        var nf = Object.assign({}, f); nf.cx = f.cx + dx; nf.cy = f.cy + dy; nf.poly = f.poly.map(function (pt) { return [pt[0] + dx, pt[1] + dy]; });
+        nf.conf = Math.min(f.conf, 0.45); out[i + q] = nf;
+      }
+      cnt++; i += K - 1;
+    }
+    return out ? { res: Object.assign({}, res, { frames: out }), jumps: cnt } : { res: res, jumps: 0 };
+  }
+  var api = { setDebug: function (f) { DBG = f; }, dropFrozenAfterCuts: dropFrozenAfterCuts, smoothJumps: smoothJumps, rectHit: rectHit, rectApply: rectApply, findFfmpeg: findFfmpeg, probe: probe, readFrames: readFrames, readOneFramePng: readOneFramePng, trackRegion: trackRegion, trackRegionAsync: trackRegionAsync, mergeResults: mergeResults, fillGaps: fillGaps, detectCuts: detectCuts, detectCutsStrict: detectCutsStrict, _cutSignals: cutSignals, _strictFromSignals: strictFromSignals, autoPick: autoPick, verifyTarget: verifyTarget, verifyTargetAsync: verifyTargetAsync, _verifyBuild: vtBuild, improveTrackAsync: improveTrackAsync, fgTrackAsync: fgTrackAsync, _fgSceneBounds: fgSceneBounds, _mergeByRef: mergeByRef, toPoints: toPoints, _lk: lkPyr, _pyramid: pyramid, trackSmall: trackSmall };
   root.TetherTrack = api;   // CEP'te hem 'module' hem 'window' vardir: ikisine de ver
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : this);

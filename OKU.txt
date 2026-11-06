@@ -1,4 +1,4 @@
-TETHER  v2.13.1
+TETHER  v2.15.0
 ==============
 Premiere Pro paneli: videodaki bir nesneyi (yuz, kafa, top...) kare kare izler ve
 hedef klibin Position / Scale / Rotation animasyonuna cevirir (After Effects tarzi takip).
@@ -16,6 +16,42 @@ KULLANIM (Takip sekmesi)
   Onizleme ustte: ayar degistikce canli guncellenir; kare kaydirici, oynat, ve onizlemede
   surukleyerek hedef konumu / kadraj konumu ayarlanir. Alttaki tutacla boyutu degistir
   (cift tikla: kucult/buyut).
+
+v2.15.0:
+  - YENI ARAYUZ: koyu patlican zemin, tek mor aksan; adimlar (1 kaynak, 2 hedef, 3 mod) bir ip ile birbirine baglanir. Is mantigi ve takip motoru DEGISMEDI.
+  - Yerlesim sadelestirildi: Takip sekmesinde yalniz "Takip modeli" gorunur; yontem, gorunumu uyarla, arama bolgesi, yon, cozunurluk "Takip ayarlari" altinda katlidir.
+    "Hazir ayar" modun ustune, "Yumusatma" Ayarlar'dan Mod kartina tasindi. "Uygulama yeri" katlanir kart oldu; "Teshis bilgisi" Araclar sekmesine tasindi.
+  - "Yalniz konum" takip modelinde boyut / olcek / donme takibi ayarlari gizlenir ve uygulanmaz (bu modelin verisinde olcek yok).
+  - v2.14.2 degisiklikleri (asagida) bu surume dahildir; v2.14.2 ayri yayinlanmadi.
+  - BILINEN SINIRLAR: asagidaki v2.14.2 sinirlari aynen gecerli. Arayuz yenilemesi Premiere'de kisitli denendi; sorun gorursen Gunluk'u gonder.
+
+v2.14.2:
+  - Uygula'da Position anahtarlari artik once yogun uretilir, dizi fps'ine oturtulur, SONRA seyreltilir (main.js compute()).
+    Eskiden seyreltme resample'dan once yapiliyordu; seyrek anahtar listesinde Position basamakli (hold) olup "isinlanma" / sivri hiz grafigi uretebiliyordu (yavas hareket veya klip fps != dizi fps).
+    Esit fps'te ve hold tetiklenmeyen durumlarda Position AYNI.
+  - "Buradan ileri / geri takip" (yeniden takip):
+      * Gunluk tanisi: takipsiz kare once -> sonra, eskiden izli olup bosalan kare sayisi ve araliklari, yeniden takip kayip istatistigi ve kullanilan yontem (nokta / sablon).
+      * Kuyruk kaybi uyarisi: yeni takip videonun ortasinda durup eskiden izli kareleri bosaltirsa panel mesaji "KUYRUK KAYBI: ... N kare (a-b)" der; kuyruk disi kayiplar icin "Eskiden izli N kare bosaldi" uyarisi eklenir. Kayip yoksa mesaj eskisiyle ayni.
+      * Baslatma hatasi korumasi: kutu dokusuz / duz bir yere cizilip motor takibe hic baslayamazsa, eski takip SILINMEZ; yalniz duzelttigin kare uygulanir ve "YENIDEN TAKIP BASLATILAMADI" mesaji gosterilir (eskiden bolgenin tamami bosaltiliyordu).
+  - Scale / Rotation, takip motoru, onizleme ve diger ayarlar DEGISMEDI.
+  - BILINEN SINIRLAR (bu surumde cozulmedi):
+      * Yeniden takipte hedef kaybolursa ve yeniden bulunamazsa videonun geri kalani bos kalabilir (artik uyari verilir). Baslangic karesine / kutuya cok duyarlidir; kutuyu nesneye cekip tekrar "Buradan ileri" de.
+      * Hizli hareket eden uzun / dikdortgen kutularda sabit kamera on plan takibi hedefin gerisinde kalabilir.
+      * "Yalniz konum" modelinde boyuta gore zoom etkisizdir (Konum + olcek modeli kullan).
+  - Surum yazimi: panelde ve manifestte 2.14.2.
+
+v2.14.1 (yerel test paketi; GitHub'da yayinlanmadi. Asagidakilerin HEPSI Premiere'de test bekliyor; yalniz Node / sentetik testlerle olculdu):
+  - NOT: v2.14.0 yayin notlari bu dosyada yok (bu dosya v2.13.1'den sonra guncellenmemisti); asagida yalniz v2.14.1 paketinin degisiklikleri yazilidir.
+  - V3 (kesmeli klip): sahne kesmesi varsa "sablonla doldurma" ve sablon denemesi YALNIZ ilk sahnede yapilir; diger sahnelerde dolgu / sabitlenmis kareler uretilmez. Sure kisalmasi bekleniyor (Node'da olculdu).
+  - V2: "sablon" adayinin kendiliginden sonucun yerine gecmesi kapatildi (isinlanma / titreme yapiyordu). Bos kareler sablonla doldurulur.
+  - Kaynak birlesim yeri (nokta takibi kaybolup sablon baslayinca) kutu bir karede cok sicrarsa 0.5 sn'de yumusak gecis yapilir (sari kareler).
+  - Arama bolgesi: Normal'de ust sinir = Video 1 kutusundaki mevcut deger (V1 ayni); buyuk kutularda artik buyumez.
+  - Panel kendiliginden yenilenmez: kutu cizilmis / kare yuklenmis / takip varsa "Simdi yenile" sorar.
+  - Elle duzeltme gecisi 1.5 sn; kesmeden sonra hic kimildamayan kareler silinir; bekleme kisaltmalari.
+  - Kadraj takibinde kenar siniri: nesne kenara yakinsa Position sinirlanir (tasarim geregi). Artik Gunluk'e UYARI yazilir (kac kare sinira dayandi + cozum: Nesne X/Y konumunu kenara kaydir ya da En cok zoom'u artir).
+  - Takip "arka plana kilitlendi" duzeltmesi: sabit kamerada on plan adayi dusuk cozunurlukte dogrulayici yuzunden elenmiyor; ilk sonuc sabit kilitliyse ve on plan hareket ediyorsa uygulanir.
+  - fps farki: takip kareleri artik KLIBIN KENDI fps'inde okunur; konumlar dizi karelerine "o karede gorunen klip karesi" ile eslenir. Klip fps okunamazsa eski davranis. Gunluk'te "Takip klibin kendi kare hizinda yapiliyor" satiri cikar.
+  - Bilinen sinirlar: yuz tamamen arkaya donunce otomatik cozum yok (elle duzeltme); Yumusatma 0 iken yurume sallantisi aynen yansir (Ayarlar > Yumusatma 3-6 dene).
 
 v2.13.1:
   - YENI: "Kare al" goruntusunde yakinlastirma / uzaklastirma (kutu cizdigin kare). + / - dugmeleri, fare tekerlegi (imlecin altina dogru), "%" dugmesi sigdirir.

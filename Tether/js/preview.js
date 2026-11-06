@@ -46,7 +46,7 @@
 
   function render() {
     box.classList.toggle('empty', !data);
-    $('pvTitle').textContent = data ? 'Önizleme' : 'Önizleme · takip bitince görünür';
+    $('pvTitle').textContent = data ? 'Önizleme' : 'Önizleme (takip bitince görünür)';
     if (!data) { $('pvTime').textContent = ''; return; }
     if (!layout()) return;
     var d = data.d, o = data.o, i = cur, n = data.pts.length;

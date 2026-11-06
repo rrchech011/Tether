@@ -97,6 +97,10 @@
   setSrc('own');   // Premiere maskesi kaynagi arayuzden gizli (kod duruyor); kayitli eski secim yok sayilir
   window.tetherSetSrc = setSrc;
 
+  // Takip modeli 'Yalnız konum' ise ölçek/boyut/dönme ayarları gizlenir (veride ölçek yok)
+  function modelUI() { document.body.classList.toggle('posonly', $('ownModel').value === 'trans'); }
+  $('ownModel').addEventListener('change', modelUI); modelUI();
+
   // Uygulama yeri: Transform secilince Shutter Angle satiri + ipucu gorunur
   function xfUI() { var x = $('applyTo').value === 'xform'; $('shutRow').classList.toggle('hidden', !x); $('xfHint').classList.toggle('hidden', !x); }
   $('applyTo').addEventListener('change', xfUI);

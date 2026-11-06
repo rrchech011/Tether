@@ -354,8 +354,10 @@
       var zz = zs ? zs[i] : (o.zoom || 150), z = zz / 100;
       var wN = o.srcW * z / o.seqW, hN = o.srcH * z / o.seqH;
       var x = pin[0] - (C[i][0] - A[0]) * wN, y = pin[1] - (C[i][1] - A[1]) * hN;
+      var x0 = x, y0 = y;
       if (wN > 1) x = Math.min(A[0] * wN, Math.max(1 - (1 - A[0]) * wN, x));
       if (hN > 1) y = Math.min(A[1] * hN, Math.max(1 - (1 - A[1]) * hN, y));
+      if (o.stats && (Math.abs(x - x0) > 0.01 || Math.abs(y - y0) > 0.01)) o.stats.clamped = (o.stats.clamped || 0) + 1;   // v2.16: kenar siniri nesneyi pin noktasina getirmeyi engelledi (tani; sonucu degistirmez)
       out.push({ tl: points[i].tl, x: x, y: y, z: zz });
     }
     return out;
@@ -373,6 +375,25 @@
     }
     var zx = need[0] * o.seqW / o.srcW * 100, zy = need[1] * o.seqH / o.srcH * 100;
     return Math.max(100, Math.ceil(Math.max(zx, zy) * 1.02));
+  }
+
+  /* v2.16: takip noktalari (klip kare hizi) ile dizi kare hizi farkliysa, her DIZI karesine o karede EKRANDA GORUNEN klip karesinin takip degeri yazilir (basamakli / "hold").
+   * Neden: video icerigi klibin kendi hizinda (ornegin 24 fps) degisir; Position'i dizi hizinda (25 / 60 fps) yumusakca kaydirmak, goruntu ile kadraj arasinda kare-kare gorece titreme uretir
+   * (zoom buyudukce katlanir). Deger, kareyi gosteren klip karesinin takip noktasidir: kadraj icerikle birebir kenetli kalir. Hiz esitse (±%2) ya da <3 nokta varsa arr AYNEN doner.
+   * arr: [{tl (sn), ...}] klip kare baslangic zamanlari, t0s: dizi baslangici (sn), fts: dizi kare suresi (sn). */
+  function resampleToFrames(arr, t0s, fts) {
+    if (!arr || arr.length < 3 || !(fts > 0)) return arr;
+    var dts = [], i, k;
+    for (i = 1; i < arr.length; i++) dts.push(arr[i].tl - arr[i - 1].tl);
+    dts.sort(function (a, b) { return a - b; });
+    var md = dts[dts.length >> 1];
+    if (!(md > 0) || Math.abs(md - fts) <= 0.02 * fts) return arr;
+    var ts = arr.map(function (p) { return p.tl; }), kA = Math.ceil((ts[0] - t0s) / fts - 1e-6), kB = Math.floor((ts[ts.length - 1] - t0s) / fts + 1e-6), out = [], j = 0;
+    for (k = kA; k <= kB; k++) {
+      var t = t0s + k * fts; while (j < ts.length - 1 && ts[j + 1] <= t + 1e-6) j++;
+      var o = Object.assign({}, arr[j]); o.tl = t; out.push(o);
+    }
+    return out.length >= 2 ? out : arr;
   }
 
   /* opts: motion{pos,scale,anchor} (kaynak klip), srcW/srcH, seqW/seqH, mode, tgtPos [x,y], step, smooth, despike, deadzone, offset [px,px], tol (px), stats */
@@ -724,7 +745,7 @@
     return { level: bad ? 'bad' : (issues.length ? 'warn' : 'good'), issues: issues, stats: st };
   }
 
-  var api = { TPS: TPS, findTracks: findTracks, toPositions: toPositions, scan: scan, processed: clean, autoZoom: autoZoom, reduceKeys: reduceKeys, reduceScalar: reduceScalar, guids: guidsFromTrackers, previewData: previewData,
+  var api = { TPS: TPS, resampleToFrames: resampleToFrames, findTracks: findTracks, toPositions: toPositions, scan: scan, processed: clean, autoZoom: autoZoom, reduceKeys: reduceKeys, reduceScalar: reduceScalar, guids: guidsFromTrackers, previewData: previewData,
     clipTiming: clipTiming, mapSourcePoints: mapSourcePoints, trackersForClip: trackersForClip, objBlobInfo: objBlobInfo, guidsOfBody: guidsOfBody, quality: quality, sizeRaw: sizeRaw,
     internals: { indexObjects: indexObjects, decodeKeyframes: decodeKeyframes, enclosing: enclosing, parentsOf: parentsOf, firstNum: firstNum } };
   root.MaskParser = api;
