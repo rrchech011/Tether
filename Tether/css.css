@@ -68,7 +68,6 @@ input[type=number]:focus-visible,select:focus-visible{outline:none;border-color:
 .seg button{padding:6px 4px;text-align:center;background:none;border-radius:6px;color:var(--mu)}
 .seg button:hover:not(:disabled){background:var(--card2);border-color:transparent;color:var(--tx)}
 .seg button.on{background:var(--card2);color:#fff;box-shadow:inset 0 0 0 1px var(--vio)}
-#srcSeg{grid-template-columns:1fr 1fr}
 .hint{color:var(--mu);font-size:11.5px;margin:8px 0 0}
 
 /* form */
@@ -147,12 +146,6 @@ footer{flex:none;border-top:1px solid var(--bd);background:var(--bg);padding:8px
 .stgrid dt{color:var(--mu);white-space:nowrap}
 .stgrid dd{margin:0;word-break:break-word;min-width:0}
 .stgrid .ok,.stgrid dd.ok{color:var(--ok)}.stgrid .warn,.stgrid dd.warn{color:var(--wn)}.stgrid .err,.stgrid dd.err{color:var(--er)}
-#stGrid{background:var(--bg);border:1px solid var(--bd);border-radius:var(--r2);padding:8px 10px;margin-top:10px}
-.ombox{margin-top:9px;padding:9px;border:1px solid var(--bd);border-radius:var(--r2);background:var(--bg)}
-.ombox p{margin:0 0 7px;font-size:11.5px;color:var(--tx)}
-.ombox.info{border-color:rgba(157,134,247,.5);background:var(--soft)}
-.ombox.warn{border-color:rgba(235,189,110,.55);background:rgba(235,189,110,.08)}
-.ombox button{margin-top:2px}
 .errbox{margin-top:9px;font-size:11.5px;color:var(--er)}
 .errbox summary{cursor:pointer;font-weight:600}
 .errbox div{white-space:pre-wrap;color:var(--mu);margin-top:5px;max-height:140px;overflow:auto;user-select:text}
@@ -195,3 +188,5 @@ details.adv.inner[open]{padding-bottom:2px}
 details.adv.inner .row{margin-top:9px}
 #smoothRow>label{margin-bottom:3px}
 #paneOwn>.hint:first-child{margin-bottom:10px}
+.logbar{display:flex;justify-content:flex-end;gap:16px;margin:8px 0 0}
+#runWhy.hidden{display:none}

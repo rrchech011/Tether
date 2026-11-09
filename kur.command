@@ -8,7 +8,7 @@ if [ -f "$BASE/Tether/ffmpeg" ]; then mkdir -p "$KEEP"; cp -f "$BASE/Tether/ffmp
 if [ ! -x "$KEEP/ffmpeg" ] && ! command -v ffmpeg >/dev/null 2>&1; then
   mkdir -p "$KEEP"; echo "ffmpeg indiriliyor (tek seferlik)..."
   TMPZ="$(mktemp -d)/ff.zip"
-  if curl -fL --max-time 300 -o "$TMPZ" "https://evermeet.cx/ffmpeg/getrelease/zip" && unzip -o -q "$TMPZ" -d "$KEEP" && [ -f "$KEEP/ffmpeg" ]; then
+  if curl -fL --progress-bar --max-time 600 -o "$TMPZ" "https://evermeet.cx/ffmpeg/getrelease/zip" && unzip -o -q "$TMPZ" -d "$KEEP" && [ -f "$KEEP/ffmpeg" ]; then
     chmod +x "$KEEP/ffmpeg"; xattr -dr com.apple.quarantine "$KEEP" 2>/dev/null; echo "ffmpeg kuruldu."
   elif command -v brew >/dev/null 2>&1; then brew install ffmpeg
   else echo "UYARI: ffmpeg indirilemedi. Internete bagli oldugundan emin ol ve tekrar calistir ya da 'brew install ffmpeg' kur."; fi

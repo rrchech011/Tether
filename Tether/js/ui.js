@@ -12,6 +12,11 @@
   each(document.querySelectorAll('.tab'), function (t) { t.onclick = function () { showPage(t.getAttribute('data-page')); }; });
   $('status').onclick = function () { showPage('pLog'); };
   $('bClear').onclick = function () { $('log').textContent = ''; };
+  $('bCopyLog').onclick = function () {
+    var txt = $('log').textContent || '';
+    if (!txt) return;
+    try { var ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); } catch (e) {}
+  };
 
   var DESC = {
     attach: 'Hedef klip bulunduğu yerde kalır, nesnenin hareketini izler.',
@@ -87,15 +92,6 @@
     ['change', 'input'].forEach(function (ev) { el.addEventListener(ev, function () { if (!applyingPreset && $('preset').value) { $('preset').value = ''; fire($('preset'), 'change'); } }); });
   });
 
-  // Takip kaynagi anahtari: Premiere maskesi / Kendi takibim (son secim hatirlanir)
-  function setSrc(v) {
-    each(document.querySelectorAll('#srcSeg button'), function (b) { b.classList.toggle('on', b.getAttribute('data-src') === v); });
-    $('paneMask').classList.toggle('hidden', v !== 'mask'); $('paneOwn').classList.toggle('hidden', v !== 'own');
-    try { localStorage.setItem('tether_src', v); } catch (e) {}
-  }
-  each(document.querySelectorAll('#srcSeg button'), function (b) { b.addEventListener('click', function () { setSrc(b.getAttribute('data-src')); }); });
-  setSrc('own');   // Premiere maskesi kaynagi arayuzden gizli (kod duruyor); kayitli eski secim yok sayilir
-  window.tetherSetSrc = setSrc;
 
   // Takip modeli 'Yalnız konum' ise ölçek/boyut/dönme ayarları gizlenir (veride ölçek yok)
   function modelUI() { document.body.classList.toggle('posonly', $('ownModel').value === 'trans'); }
@@ -105,4 +101,9 @@
   function xfUI() { var x = $('applyTo').value === 'xform'; $('shutRow').classList.toggle('hidden', !x); $('xfHint').classList.toggle('hidden', !x); }
   $('applyTo').addEventListener('change', xfUI);
   smoothOut(); applyMode(); zoomUI(); xfUI();   // main.js kayitli ayarlari yukledikten sonra calisir
+  (function () {
+    var ls = $('langSel'); if (!ls) return;
+    ls.value = window.TETHER_LANG === 'en' ? 'en' : 'tr';
+    ls.onchange = function () { try { localStorage.setItem('tether_lang', ls.value); } catch (e) {} location.reload(); };
+  })();
 })();

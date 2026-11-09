@@ -89,7 +89,7 @@
       cross(outXY[i], '#38bdf8', 7);
       dot(d.Q[i], '#f97316', 4);
     }
-    if (gap) { g.fillStyle = '#f06b5b'; g.font = '600 11px sans-serif'; g.fillText('Kenarda boşluk var', 6, 14); }
+    if (gap) { g.fillStyle = '#f06b5b'; g.font = '600 11px sans-serif'; g.fillText(T('Kenarda boşluk var'), 6, 14); }
     var t = data.pts[i].tl - data.track.clipStartSec;
     $('pvTime').textContent = t.toFixed(2) + ' sn · ' + (i + 1) + '/' + n + (o.mode === 'follow' && d.out[i].z ? ' · %' + Math.round(d.out[i].z) : '');
   }
@@ -191,7 +191,6 @@
   // ---- ayar degisince canli guncelle ----
   each(document.querySelectorAll('#pSet input, #pSet select'), function (el) { el.addEventListener('input', sched); el.addEventListener('change', sched); });
   $('mode').addEventListener('change', sched);
-  $('selMask').addEventListener('change', sched);
   window.addEventListener('resize', function () { if (pvh > maxH()) setH(maxH(), false); else render(); });
 
   window.MTPreview = {

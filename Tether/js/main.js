@@ -5,7 +5,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var st = { src: null, tgts: [], tracks: [], xml: null, backups: {}, last: null, undo: [], batch: 0, neutral: {}, written: {}, declined: {} };
   var CHUNK = 200;
-  var SAVE_IDS = ['mode', 'fit', 'step', 'smooth', 'tol', 'despike', 'pinX', 'pinY', 'zoom', 'zoomMax', 'zoomMode', 'sizeTrack', 'sizeStr', 'autoZoom', 'dz', 'offX', 'offY', 'ref', 'txtComp', 'plc', 'plcGap', 'scTrack', 'scStr', 'omFix', 'keepOld', 'applyTo', 'shutterAng', 'preset', 'rotTrack', 'ownModel'];
+  var SAVE_IDS = ['mode', 'fit', 'step', 'smooth', 'tol', 'despike', 'pinX', 'pinY', 'zoom', 'zoomMax', 'zoomMode', 'sizeTrack', 'sizeStr', 'autoZoom', 'dz', 'offX', 'offY', 'ref', 'txtComp', 'plc', 'plcGap', 'scTrack', 'scStr', 'keepOld', 'applyTo', 'shutterAng', 'preset', 'rotTrack', 'ownModel'];
 
   function log(s) {
     var l = $('log'); l.textContent += s + '\n'; if (l.textContent.length > 40000) l.textContent = l.textContent.slice(-30000); l.scrollTop = l.scrollHeight;
@@ -28,7 +28,7 @@
   function posix(p) { return p.replace(/\\/g, '/'); }
   function outDir() { var d = path.join(os.homedir(), 'Desktop'); return fs.existsSync(d) ? d : os.homedir(); }
   function progress(f) { $('prog').firstChild.style.width = Math.round(Math.max(0, Math.min(1, f)) * 100) + '%'; }
-  var BTNS = ['bSrc', 'bTgt', 'bGo', 'bUndo', 'bReset', 'bCsv', 'bDbg', 'bRaw', 'bScan', 'bProbe', 'bFind', 'bOmUse', 'bOmReport', 'bOmCache', 'bDiagCopy'];
+  var BTNS = ['bTgt', 'bGo', 'bUndo', 'bReset', 'bCsv', 'bDbg', 'bRaw', 'bProbe', 'bDiagCopy'];
   var isBusy = false;
   // Premiere keyframe'leri oynatma basligi oynamadan ekrana yansitmaz; yazimdan sonra monitoru yenile
   function refreshMonitor() { return ev('ppRefresh()').catch(function () {}); }
@@ -73,7 +73,7 @@
     $(id).addEventListener('change', function () { saveSettings(); if (id !== 'mode' && id !== 'live') touch(); });
   });
   $('live').addEventListener('change', function () { if ($('live').checked) touch(); });
-  ['srcW', 'srcH', 'selMask'].forEach(function (id) { $(id).addEventListener('change', touch); });
+  ['srcW', 'srcH'].forEach(function (id) { $(id).addEventListener('change', touch); });
   var DEFAULTS = {};   // HTML'deki ilk degerler (kayitli ayarlar yuklenmeden once)
   SAVE_IDS.forEach(function (id) { DEFAULTS[id] = $(id).type === 'checkbox' ? $(id).checked : $(id).value; });
   function fireEv(el, type) { var ev = document.createEvent('Event'); ev.initEvent(type, true, true); el.dispatchEvent(ev); }
@@ -110,247 +110,22 @@
   }
 
   /* ===================== v1.9: analiz durumu, asamalar, hatalar, diagnostics ===================== */
-  var PLUGIN_VERSION = '2.15.0';
-  var OM = window.ObjectMask || null;                 // yoksa (yuklenemediyse) eski akisla devam edilir
-  st.diag = { api: null, detection: null, locate: null, parse: null, projectPath: '', xml: null };
-  st.omCand = null;
+  var PLUGIN_VERSION = '2.16.0';
   var TPS_ = (window.MaskParser && MaskParser.TPS) || 254016000000;
-  var LV = { ok: '✓', warn: '⚠', err: '✕' };
-  function fmtDur(sec) { if (!isFinite(sec) || sec < 0) return '—'; var m = Math.floor(sec / 60), s = sec - m * 60; return (m ? m + ' dk ' : '') + s.toFixed(1) + ' sn'; }
 
-  var stageEls = [];
-  function stagesInit(texts) {
-    var ol = $('stages'); ol.innerHTML = ''; stageEls = [];
-    texts.forEach(function (t) { var li = document.createElement('li'); li.textContent = t; li.setAttribute('data-t', t); ol.appendChild(li); stageEls.push(li); });
-    ol.classList.remove('hidden');
-  }
-  function stage(i, state, text) {
-    var li = stageEls[i]; if (!li) return;
-    li.className = state || ''; if (text) li.textContent = text;
-  }
-  function stagesDone(text) {
-    var li = document.createElement('li'); li.className = 'ok'; li.textContent = text; $('stages').appendChild(li); stageEls.push(li);
-  }
-  function setCell(id, html, cls) { var e = $(id); if (!e) return; e.innerHTML = html; e.className = cls || ''; }
-  function renderGrid(g) {
-    $('stGrid').classList.remove('hidden');
-    setCell('gSrc', g.src ? '<b>' + esc(g.src) + '</b>' : '—');
-    setCell('gMask', (g.mask && g.mask.length) ? g.mask.map(function (l) { return '<div class="' + l.level + '">' + LV[l.level] + ' ' + esc(l.text) + '</div>'; }).join('') : '—');
-    setCell('gStatus', g.status ? LV[g.status.level] + ' ' + esc(g.status.text) : '—', g.status ? g.status.level : '');
-    setCell('gData', g.data ? LV[g.data.level] + ' ' + esc(g.data.text) : '—', g.data ? g.data.level : '');
-    setCell('gTrk', g.trk ? LV[g.trk.level] + ' ' + esc(g.trk.text) : '—', g.trk ? g.trk.level : '');
-    setCell('gRange', g.range ? LV[g.range.level] + ' ' + esc(g.range.text) : '—', g.range ? g.range.level : '');
-    setCell('gKf', g.kf === undefined || g.kf === null ? '—' : String(g.kf));
-    setCell('gDur', g.dur || '—');
-    setCell('gQual', g.q ? LV[g.q.level === 'good' ? 'ok' : g.q.level === 'warn' ? 'warn' : 'err'] + ' ' + esc(g.q.text) : '—', g.q ? (g.q.level === 'good' ? 'ok' : g.q.level === 'warn' ? 'warn' : 'err') : '');
-  }
-  function showErr(e, extraHint) {
-    var box = $('errBox');
-    if (!e) { box.classList.add('hidden'); return; }
-    $('errTitle').textContent = e.title;
-    $('errDetail').textContent = (e.hint ? e.hint + '\n' : '') + (extraHint ? extraHint + '\n' : '') + (e.detail ? '\nDetails:\n' + e.detail : '');
-    box.classList.remove('hidden'); box.open = false;
-  }
-  function resetStatus() {
-    st.omCand = null; showErr(null); $('omBox').classList.add('hidden');
-    $('stGrid').classList.add('hidden'); st.diag = { api: null, detection: null, locate: null, parse: null, projectPath: '', xml: null };
-  }
-  // bir asamada hata: asama + durum satiri + hata kutusu + gunluk
-  function failAt(i, code, detail, headline) {
-    var e = OM ? OM.errors.make(code, detail) : { code: code, title: String(detail || code), hint: '', detail: '' };
-    stage(i, 'err', e.title); showErr(e);
-    setInfo('srcInfo', (headline ? headline + '<br>' : '') + esc(e.title) + '. ' + esc(e.hint), 'err');
-    log('HATA: ' + e.title + (detail ? ' (' + String(detail).split('\n')[0] + ')' : ''));
-    renderDiag();
-  }
   function qualityCell(track) {
     if (!track || !window.MaskParser || !MaskParser.quality) return null;
     var q = MaskParser.quality(track.points), lbl = q.level === 'good' ? 'İyi' : q.level === 'warn' ? 'Uyarı' : 'Sorun';
     return { level: q.level, text: lbl + (q.issues.length ? ' — ' + q.issues.join(', ') : ''), raw: q };
   }
-  function currentGrid() {
-    var c = st.src, d = st.diag.detection, t = st.tracks[Number($('selMask').value) || 0] || null;
-    var g = { src: c ? c.name + (c.nat ? ' (' + c.nat[0] + '×' + c.nat[1] + ')' : '') + (c.uniform === false ? ' · Uniform Scale kapalı (' + Math.round(c.scaleW || 0) + '% × ' + Math.round(c.scale) + '%)' : '') : '', mask: d ? d.lines.slice() : [], kf: t ? t.points.length : (d ? 0 : null), q: null };
-    if (t && t.kind === 'object' && t.unverified) g.mask = [{ level: 'ok', text: 'Object Mask — ' + t.points.length + ' keyframe (dosyadan)' }];
-    // Object Mask: Algılama -> Veri (PRMF) -> Takip  (ayrı ayrı)
-    var isObj = (d && (d.state === 'object-nodata' || d.state === 'object-ok')) || (t && t.kind === 'object');
-    if (isObj) {
-      var lc2 = st.diag.locate, nf = lc2 ? lc2.files.filter(function (f) { return !f.isDir; }).length : 0, pp = st.diag.parse;
-      g.data = nf ? { level: 'ok', text: 'PRMF bulundu (' + nf + ' dosya)' } : (d.state === 'object-ok' ? { level: 'ok', text: 'Projede' } : { level: 'warn', text: lc2 ? 'PRMF bulunamadı' : 'Aranmadı' });
-      g.trk = (t && t.kind === 'object' && t.unverified) ? { level: 'ok', text: 'Okundu: ' + t.points.length + ' kare · önizlemeyi kontrol et' } : (pp && pp.ok ? { level: 'ok', text: 'Okundu · uygulamaya hazır' } : (nf ? { level: 'warn', text: 'Veri biçimi desteklenmiyor' } : (d.state === 'object-ok' ? { level: 'ok', text: t ? t.points.length + ' keyframe' : 'Okundu' } : { level: 'err', text: 'Takip verisi yok' })));
-    }
-    var rg = t && t.range ? t.range : (st.omCand && st.omCand.range ? st.omCand.range : null); if (isObj && rg) g.range = rg;
-    var dur = c ? (Number(c.endTicks) - Number(c.startTicks)) / TPS_ : NaN;
-    g.dur = fmtDur(dur) + (t && t.points.length > 1 ? ' · takip ' + fmtDur(t.points[t.points.length - 1].tl - t.points[0].tl) : '');
-    if (t) { g.status = t.unverified ? { level: 'ok', text: 'Dosya verisi okundu' } : { level: 'ok', text: t.points.length + ' keyframe okundu' }; g.q = qualityCell(t); }
-    else if (d && d.state === 'object-nodata') g.status = { level: 'warn', text: 'Takip verisi erişilemiyor' };
-    else if (d && d.state === 'untracked') g.status = { level: 'warn', text: 'Maske takip edilmemiş' };
-    else if (d && d.state === 'none') g.status = { level: 'err', text: 'Maske bulunamadı' };
-    return g;
-  }
-  function refreshStatus() { if (st.src && (st.diag.detection || st.tracks.length)) renderGrid(currentGrid()); }
-
-  function diagCtx() { return { pluginVersion: PLUGIN_VERSION, api: st.diag.api, projectPath: st.diag.projectPath, selection: st.src, detection: st.diag.detection, locate: st.diag.locate, parse: st.diag.parse, range: st.diag.range }; }
   function renderDiag() {
     var dl = $('diagGrid'); if (!dl) return; dl.innerHTML = '';
-    var rows = OM ? OM.diagnostics.summary(diagCtx()) : [['Eklenti sürümü', PLUGIN_VERSION], ['Object Mask modülü', 'yüklenemedi']];
-    rows.forEach(function (r) { var a = document.createElement('dt'), b = document.createElement('dd'); a.textContent = r[0]; b.textContent = r[1]; dl.appendChild(a); dl.appendChild(b); });
+    var ffp = null; try { ffp = ownFf(); } catch (e) {}
+    var rows = [['Eklenti sürümü', PLUGIN_VERSION], ['ffmpeg', ffp ? 'bulundu' : 'bulunamadı'], ['Takip modülü', window.TetherTrack ? 'yüklü' : 'yüklenemedi'], ['Hedef klip sayısı', String((st.tgts || []).length)], ['Takip noktası', st.tracks && st.tracks[0] ? String(st.tracks[0].points.length) : '—']];
+    rows.forEach(function (r) { var x = document.createElement('dt'), y = document.createElement('dd'); x.textContent = r[0]; y.textContent = r[1]; dl.appendChild(x); dl.appendChild(y); });
     st.diagRows = rows;
   }
-  function writeOmReport(quiet) {
-    if (!OM) return null;
-    try {
-      var f = path.join(outDir(), 'tether_objectmask_rapor.txt');
-      fs.writeFileSync(f, OM.diagnostics.build(diagCtx()), 'utf8');
-      if (!quiet) log('Object Mask raporu yazıldı: ' + f);
-      return f;
-    } catch (e) { log('HATA: rapor yazılamadı: ' + e); return null; }
-  }
 
-  $('bSrc').onclick = async function () {
-    busy(true); resetStatus();
-    stagesInit(['Klip analiz ediliyor…', 'Maskeler algılanıyor…', 'Takip verisi okunuyor…', 'Keyframe\'ler işleniyor…']);
-    try {
-      stage(0, 'run'); setInfo('srcInfo', 'Okunuyor…', '');
-      var c = await evJson('ppGetSelection()');
-      if (!c.ok) return failAt(0, OM ? OM.errors.classify(c.err) : 'NO_CLIP', c.err);
-      if (!fs) return failAt(0, 'NODE_MISSING', 'Node.js erişimi yok (manifest --enable-nodejs)');
-      st.src = c; st.tracks = []; st.xml = null; mark('card1', false);
-      $('srcW').value = c.nat ? c.nat[0] : c.seqW;
-      $('srcH').value = c.nat ? c.nat[1] : c.seqH;
-      setInfo('srcInfo', '<b>' + esc(c.name) + '</b><br>Analiz ediliyor…', '');
-      var rb = restoreBase(c);
-      if (!rb && (c.posAnimated || c.scaleAnimated)) log('UYARI: Klibin Position/Scale değeri animasyonlu. Sadece ilk keyframe değeri kullanılır; sonuç kayabilir.');
-      if (!c.nat) log('Bilgi: Kaynak boyutu okunamadı, sekans boyutu varsayıldı. Gerekirse Gelişmiş bölümünden elle gir.');
-      // Premiere API tanilamasi (zorunlu degil: eski/yeni surumlerde calismazsa sadece "sinir" olarak raporlanir)
-      var api = await evJson('ppDiag()');
-      if (!api || (api.ok === false && /Yanıt okunamadı/.test(api.err || ''))) api = { ok: false, err: 'ppDiag çalışmadı', limits: ['bu Premiere sürümünde tanılama betiği çalışmadı'] };
-      st.diag.api = api; if (api.limits && api.limits.length) log('Bilgi: Premiere API sınırı: ' + api.limits.slice(0, 3).join('; '));
-      log('Proje kaydediliyor...');
-      var s = await evJson('ppSaveProject()');
-      if (!s.ok) return failAt(0, OM ? OM.errors.classify(s.err) : 'PROJECT_NOT_SAVED', s.err, '<b>' + esc(c.name) + '</b>');
-      st.diag.projectPath = s.path;
-      var xml;
-      try { xml = zlib.gunzipSync(fs.readFileSync(s.path)).toString('utf8'); st.xml = xml; st.diag.xml = xml; }
-      catch (e) { return failAt(0, 'PROJECT_READ', e && (e.stack || e), '<b>' + esc(c.name) + '</b>'); }
-      stage(0, 'ok', 'Klip: ' + c.name + (api.version ? ' · Premiere ' + api.version : ''));
-
-      // --- maske algilama ---
-      stage(1, 'run');
-      var det = null;
-      if (OM) { try { det = OM.detector.detect(xml, Number(c.startTicks), c.name, api); } catch (e) { log('UYARI: algılama hatası: ' + e); } }
-      st.diag.detection = det;
-      try { st.tracks = MaskParser.findTracks(xml, Number(c.startTicks), c.name); }
-      catch (e) { st.tracks = []; renderDiag(); return failAt(1, 'PARSER_ERROR', e && (e.stack || e), '<b>' + esc(c.name) + '</b>'); }
-      if (det) {
-        var worst = det.lines.some(function (l) { return l.level === 'err'; }) ? 'err' : (det.lines.some(function (l) { return l.level === 'warn'; }) ? 'warn' : 'ok');
-        stage(1, worst, 'Maskeler: ' + det.lines.map(function (l) { return l.text; })[0] + (det.lines.length > 1 ? ' (+' + (det.lines.length - 1) + ')' : ''));
-        det.lines.forEach(function (l) { log((l.level === 'ok' ? '' : l.level === 'warn' ? 'UYARI: ' : 'Bilgi: ') + l.text); });
-      } else stage(1, 'ok', 'Maskeler aranıdı');
-      // proje icinde okunan tracker'lari tur etiketiyle isaretle
-      if (det) {
-        var readable = det.masks.filter(function (m) { return m.keyframes > 0; });
-        st.tracks.forEach(function (t, i) { var m = readable[i]; if (m && m.keyframes === t.points.length) { t.kind = m.kind; t.shape = m.shape; } t.source = 'proje'; });
-      }
-
-      // --- takip verisi ---
-      stage(2, 'run');
-      if (st.tracks.length) stage(2, 'ok', 'Takip verisi projede okundu (' + st.tracks.length + ' maske, ' + st.tracks[0].points.length + ' kare)');
-      else if (det && det.state === 'object-nodata' && OM) {
-        stage(2, 'run', 'Object Mask veri dosyası aranıyor…');
-        var projDir = ''; try { projDir = path.dirname(s.path); } catch (e0) {}
-        var lc = null;
-        try { lc = await OM.reader.locate({ guids: det.guids, projectDir: projDir, xml: xml, onStage: function (t) { stage(2, 'run', 'Object Mask: ' + t); } }); }
-        catch (e) { log('UYARI: dosya araması hatası: ' + e); }
-        st.diag.locate = lc;
-        var files = lc ? lc.files.filter(function (f) { return !f.isDir; }) : [], pr = null, pf = null;
-        stage(2, 'run', 'Object Mask veri dosyası çözülüyor…');
-        try { pf = OM.parser.parseFiles(files.map(function (f) { return f.path; })); pr = pf.best; } catch (e3) { log('UYARI: PRMF çözme hatası: ' + e3); }
-        st.diag.tried = pf ? pf.tried : [];
-        if (pr) {
-          var timing = MaskParser.clipTiming(xml, Number(c.startTicks), c.name);
-          if (!timing) { st.diag.parse = { ok: false, reason: 'klip zamanlaması projeden çözülemedi' }; stage(2, 'warn', 'Dosya eşleşti ama klip zamanlaması çözülemedi'); }
-          else {
-            // PRMF zamanları klip-bağıl (ilk kare = 0): kaynak zamanına klibin In noktası eklenir (doğrulanamayan varsayım)
-            // PRMF tick'leri KAYNAK MEDYA zamanıdır (kırpılmış klipte kanıtlandı: InPoint 50 kare + 10 kare = ilk tick 60 kare). InPoint eklenmez.
-            var rf0 = ($('omFix') && !$('omFix').checked) ? null : OM.refine(pr.points);
-            var srcPts = rf0 ? rf0.points : pr.points;
-            var nUse = srcPts.length, trimTxt = (rf0 && (rf0.trimmedHead || rf0.trimmedTail)) ? ' Güvenilmez ' + (rf0.trimmedHead + rf0.trimmedTail) + ' kare (nesne kaybı / ani sıçrama) kırpıldı.' : '';
-            var mapped = MaskParser.mapSourcePoints(timing, srcPts);
-            var rng = OM.coverage ? OM.coverage(srcPts, timing) : null;
-            var over = mapped.filter(function (p) { return p.tl > timing.end / TPS_ + 0.002; }).length;
-            st.omCand = { points: mapped, file: pr.path, parserLabel: pr.parserLabel, clipStartSec: timing.start / TPS_, clipEndSec: timing.end / TPS_, relTime: !!pr.relTime, range: rng };
-            st.diag.parse = { ok: true, parserLabel: pr.parserLabel, points: pr.points, file: pr.path };
-            st.diag.range = rng;
-            stage(2, rng && !rng.full ? 'warn' : 'ok', 'Object Mask takibi okundu: ' + nUse + ' kare' + (rng ? ' (' + rng.text + ')' : ''));
-            $('omMsg').textContent = 'Object Mask takibi hazır: ' + nUse + ' kare' + (rng ? ' · ' + rng.text : '') + '.' + trimTxt + ' Konum, nesne kutusunun merkezidir. Uygulamadan önce önizlemede kutunun nesneyi izlediğini kontrol et; yanlışsa Geri al.' + (pr.meta && pr.meta.lostFrames ? ' Premiere takipte nesneyi kaybetti (' + pr.meta.lostFrames + ' yerde); o karelerden sonrası takip dışı. Premiere\'de maskeyi nesne net görünen bir karede baştan çizip tekrar takip ettirirsen daha uzun takip alabilirsin.' : '') + (rng && !rng.full ? ' Takip dışı kalan karelerde hareket ilk/son bilinen konumda sabit kalır.' : '') + (over ? ' UYARI: ' + over + ' kare klip süresinin dışına düşüyor.' : '');
-            $('omBox').className = 'ombox ' + (rng && !rng.full ? 'warn' : 'info');
-            $('omBox').classList.remove('hidden');
-            log('Object Mask dosyasından ' + nUse + '/' + pr.points.length + ' kare kullanılıyor: ' + pr.path + (rng ? ' · ' + rng.text : '') + (over ? ' · ' + over + ' kare klip dışında' : ''));
-          }
-        } else {
-          var reason = files.length ? (pf && pf.tried.some(function (t) { return t.error; }) ? 'dosya bulundu ama ayrıştırma hatası' : 'dosya bulundu ama biçimi tanınmadı veya doğrulanamadı') : 'veri dosyası bulunamadı';
-          st.diag.parse = { ok: false, reason: reason + (pf && pf.tried.length ? ' · ' + pf.tried.map(function (t) { return t.reason; }).filter(Boolean).join(' | ') : '') };
-          stage(2, 'warn', 'Object Mask: ' + reason);
-          var rf = writeOmReport(true);
-          log('UYARI: Object Mask — ' + reason + (lc ? ' (' + lc.searched.map(function (x) { return x.stage + ': ' + x.scanned + ' öğe'; }).join(', ') + (lc.fromCache ? ', önbellekten ' + lc.fromCache : '') + ')' : ''));
-          if (rf) log('Object Mask raporu yazıldı: ' + rf + ' — bu dosyayı bana gönder; biçim çözülebilirse çözücü eklerim.');
-          var perr = pf && pf.tried.filter(function (t) { return t.error; })[0];
-          showErr(OM.errors.make(perr ? 'PARSER_ERROR' : (files.length ? 'OM_UNSUPPORTED_FORMAT' : 'OM_FILE_NOT_FOUND'), lc ? lc.searched.map(function (x) { return x.stage + ': ' + x.scanned + ' öğe, ' + x.ms + ' ms'; }).join('\n') + (files.length ? '\n' + (pf ? pf.tried.map(function (t) { return t.path + ' → ' + (t.reason || (t.error && t.error.detail) || '?'); }) : files.map(function (f) { return f.path; })).join('\n') : '') : ''),
-            OM.errors.ERR.OM_NO_DATA.hint);
-        }
-      } else if (det && det.state === 'untracked') { stage(2, 'warn', 'Maske takip edilmemiş, okunacak veri yok'); showErr(OM.errors.make('MASK_UNTRACKED')); }
-      else { stage(2, 'warn', 'Okunacak takip verisi yok'); if (OM && det) showErr(OM.errors.make(det.state === 'none' ? 'NO_MASK' : 'MASK_UNTRACKED')); }
-
-      // --- keyframe isleme ---
-      stage(3, 'run');
-      var sel = $('selMask'); sel.innerHTML = '';
-      st.tracks.forEach(function (t, i) {
-        var o = document.createElement('option');
-        o.value = i; o.textContent = 'Maske ' + (i + 1) + ' - ' + t.points.length + ' kare'; sel.appendChild(o);
-      });
-      var mr = $('maskRow'); if (mr && mr.classList) mr.classList.toggle('hidden', st.tracks.length < 2);
-      mark('card1', st.tracks.length > 0);
-      refreshPreview(false);
-      if (st.tracks.length) {
-        var q0 = qualityCell(st.tracks[0]);
-        stage(3, q0 && q0.level !== 'good' ? 'warn' : 'ok', st.tracks[0].points.length + ' keyframe işlendi' + (q0 ? ' · takip kalitesi: ' + q0.text.split(' — ')[0] : ''));
-        setInfo('srcInfo', '<b>' + esc(c.name) + '</b><br>' + st.tracks.length + ' takipli maske · ' + st.tracks[0].points.length + ' kare', 'ok');
-        log(st.tracks.length + ' takipli maske bulundu.');
-        if (q0 && q0.level !== 'good') log('UYARI: Takip kalitesi: ' + q0.text + (q0.raw.stats.spikes && !$('despike').checked ? ' — "Sıçramaları düzelt" ayarını aç.' : ''));
-        stagesDone('✓ Analiz tamamlandı');
-      } else {
-        var head = !det ? 'Bu klipte takip verisi olan maske bulunamadı.' : (det.state === 'object-nodata' ? 'Object Mask algılandı, takip verisine erişilemiyor.' : det.state === 'untracked' ? 'Maske var ama takip edilmemiş.' : 'Maske bulunamadı.');
-        stage(3, 'err', 'Keyframe işlenemedi: takip verisi yok');
-        setInfo('srcInfo', '<b>' + esc(c.name) + '</b><br>' + esc(head), 'err');
-        log('Bu klipte takip verisi olan maske bulunamadı.');
-        try {
-          var txt = MaskParser.scan(xml, Number(c.startTicks), c.name), f = path.join(outDir(), 'tether_tarama.txt');
-          fs.writeFileSync(f, txt, 'utf8');
-          log('Teşhis dosyası otomatik yazıldı: ' + f + ' — bu dosyayı bana gönder. Ayrıca Araçlar sekmesinden "Canlı teşhis"e basıp tether_canli.txt dosyasını da gönder.');
-        } catch (e2) { log('Teşhis dosyası yazılamadı: ' + e2); }
-      }
-      renderGrid(currentGrid()); renderDiag();
-    } catch (e) {
-      failAt(3, 'PARSER_ERROR', e && (e.stack || e));
-    } finally { busy(false); }
-  };
-
-  // Doğrulanmamış Object Mask dosya verisini, kullanıcı onaylarsa mevcut hatta bagla
-  $('bOmUse').onclick = function () {
-    var cd = st.omCand; if (!cd) return;
-    st.tracks = [{ clipStartSec: cd.clipStartSec, clipEndSec: cd.clipEndSec, points: cd.points, kind: 'object', source: 'dosya', unverified: true, file: cd.file, range: cd.range }];
-    var sel = $('selMask'); sel.innerHTML = ''; var o = document.createElement('option'); o.value = 0; o.textContent = 'Object Mask - ' + cd.points.length + ' kare'; sel.appendChild(o);
-    $('maskRow').classList.add('hidden'); $('omBox').classList.add('hidden'); showErr(null);
-    mark('card1', true); refreshPreview(false); updateReady();
-    if (!(Number($('smooth').value) > 0)) { $('smooth').value = 4; var ev0 = document.createEvent('Event'); ev0.initEvent('input', true, true); $('smooth').dispatchEvent(ev0); var ev1 = document.createEvent('Event'); ev1.initEvent('change', true, true); $('smooth').dispatchEvent(ev1); log('Yumuşatma 4 yapıldı (Object Mask kutusu kare kare hafif titrer). İstersen Ayarlar sekmesinden değiştir.'); }
-    log('Object Mask takibi kullanılıyor (' + cd.parserLabel + '). Önizlemede hareketi kontrol et; sonuç yanlışsa Geri al.');
-    setInfo('srcInfo', '<b>' + esc(st.src.name) + '</b><br>Object Mask · ' + cd.points.length + ' kare (doğrulanmadı)', 'ok');
-    stagesDone('✓ Object Mask takibi hazır — önizlemede kontrol et');
-    renderGrid(currentGrid());
-    var q = qualityCell(st.tracks[0]); if (q && q.level !== 'good') log('UYARI: Takip kalitesi: ' + q.text);
-  };
-  $('selMask').addEventListener('change', refreshStatus);
 
   // ===== Kendi takibim (beta): ffmpeg + Tether Tracker =====
   var OWN = window.TetherTrack, osm = null, pth = null;
@@ -390,7 +165,7 @@
       if (f) {
         var okc = f.conf >= WEAK; g.strokeStyle = okc ? '#3ddc84' : '#ffc400'; g.lineWidth = 2.5; g.beginPath(); f.poly.forEach(function (p, j) { j ? g.lineTo(p[0] * sc, p[1] * sc) : g.moveTo(p[0] * sc, p[1] * sc); }); g.closePath(); g.stroke();
       }
-      else { g.fillStyle = 'rgba(255,60,60,.9)'; g.font = 'bold 13px sans-serif'; g.fillText('bu karede takip yok (kayıp / kapalı)', 10, 20); }
+      else { g.fillStyle = 'rgba(255,60,60,.9)'; g.font = 'bold 13px sans-serif'; g.fillText(T('bu karede takip yok (kayıp / kapalı)'), 10, 20); }
     }
     if (own.rect) {                         // dis kutu: arama bolgesi
       var o = ownOuter(), cw = cv.width, ch = cv.height;
@@ -398,8 +173,8 @@
       g.fillRect(o[0] * cw, o[1] * ch, o[2] * cw, o[3] * ch); g.strokeRect(o[0] * cw, o[1] * ch, o[2] * cw, o[3] * ch); g.restore();
       g.fillStyle = '#ffb02e'; var ox = [o[0], o[0] + o[2] / 2, o[0] + o[2]], oy = [o[1], o[1] + o[3] / 2, o[1] + o[3]];
       for (var a = 0; a < 3; a++) for (var b = 0; b < 3; b++) { if (a === 1 && b === 1) continue; g.fillRect(ox[a] * cw - 3, oy[b] * ch - 3, 7, 7); }
-      g.font = 'bold 11px sans-serif'; g.fillStyle = '#ffb02e'; g.fillText('Arama bölgesi', Math.max(4, o[0] * cw + 4), Math.max(12, o[1] * ch - 4));
-      g.fillStyle = '#5aa9ff'; g.fillText('Takip bölgesi', own.rect[0] * cw + 4, own.rect[1] * ch + 13);
+      g.font = 'bold 11px sans-serif'; g.fillStyle = '#ffb02e'; g.fillText(T('Arama bölgesi'), Math.max(4, o[0] * cw + 4), Math.max(12, o[1] * ch - 4));
+      g.fillStyle = '#5aa9ff'; g.fillText(T('Takip bölgesi'), own.rect[0] * cw + 4, own.rect[1] * ch + 13);
     }
     if (own.rect) { var r = own.rect; g.lineWidth = 2; g.strokeStyle = '#2d8ceb'; g.fillStyle = 'rgba(45,140,235,.12)'; g.fillRect(r[0] * cv.width, r[1] * cv.height, r[2] * cv.width, r[3] * cv.height); g.strokeRect(r[0] * cv.width, r[1] * cv.height, r[2] * cv.width, r[3] * cv.height);
       g.fillStyle = '#fff'; var hx = [r[0], r[0] + r[2] / 2, r[0] + r[2]], hy = [r[1], r[1] + r[3] / 2, r[1] + r[3]];
@@ -476,7 +251,7 @@
       if (d.mode === 'outer') { drawOwn(); return; }
       if (d.mode === 'new' && r && (r[2] * sz[0] < 14 || r[3] * sz[1] < 14)) { own.rect = d.r0; drawOwn(); if (!d.r0) { ownMsg('Dikdörtgen çok küçük; nesnenin üstüne daha büyük çiz.', 'err'); $('bOwnRun').disabled = true; } return; }
       if (!r) return;
-      $('bOwnRun').disabled = false;
+      $('bOwnRun').disabled = false; setRunWhy(false);
       var srcMax = Math.max(r[2] * (own.imgW || 1), r[3] * (own.imgH || 1));
       if ($('ownMethod').value === 'auto' && own.imgW && srcMax < 0.07 * own.imgW) ownMsg('Bölge hazır. Nesne küçük görünüyor (~' + Math.round(srcMax) + ' px). Ekran kaydında fare imleci gibi küçük bir şeyse "Yöntem" listesinden "İmleç / küçük nesne"yi seç; sonra "Takip et".', 'ok');
       else ownMsg('Bölge hazır. Kutuyu tutup taşıyabilir, kenar/köşelerinden boyutlandırabilirsin; sonra "Takip et".', 'ok');
@@ -492,7 +267,7 @@
       var ff = ownFf(); if (!ff) return ownMsg(FF_HELP, 'err');
       var fr = Number(inf.frameTicks) > 0 ? Number(inf.frameTicks) / TPS_ : 1 / 30;
       var tRef = Math.min(Math.max(inf.inSec + (inf.playSec - inf.startSec), inf.inSec), inf.outSec - fr);
-      own.info = inf; own.tRef = tRef; own.rect = null; $('bOwnRun').disabled = true;
+      own.info = inf; own.tRef = tRef; own.rect = null; $('bOwnRun').disabled = true; setRunWhy(true);
       var png = pth.join(osm.tmpdir(), 'tether_ownframe.png');
       try { fs.unlinkSync(png); } catch (e0) {}
       ownMsg('Kare alınıyor…');
@@ -594,6 +369,7 @@
     drawConf(i);
     $('ownScrubInfo').textContent = 'Kare ' + (i + 1) + '/' + own.frames.length + (f ? (f.conf < WEAK ? ' · zayıf (güven %' + Math.round(f.conf * 100) + ')' : ' · izleniyor') : ' · takip yok' + (sugg ? ' · kutu komşu karelerden ÖNERİLDİ, nesneye çekip düzelt' : ''));
   }
+  function setRunWhy(on) { var w = $('runWhy'); if (w) w.classList.toggle('hidden', !on); }
   function ownBusyUI(on) { own.running = on; $('bOwnRun').textContent = on ? 'Durdur' : 'Takip et'; $('bOwnRun').classList.toggle('primary', !on); ['bOwnFrame', 'bOwnFwd', 'bOwnBwd'].forEach(function (id) { $(id).disabled = on; }); $('ownScrub').disabled = on; }
   // Sonucu Tether takip verisine cevir ve durum panelini guncelle
   // v2.14: hedef dogrulama uyari metni. Kare numaralari arayuzdeki gibi 1'den baslar. B DENEYSELDIR; hicbir ifade kesin hedef kaybi iddiasi degildir.
@@ -615,12 +391,9 @@
     var timing = { start: Number(inf.startTicks), end: Number(inf.endTicks), inP: inT, outP: inf.outSec * TPS_, ratio: 1 };
     var mapped = MaskParser.mapSourcePoints(timing, pts);
     var c = await evJson('ppGetSelection()'); if (!c.ok) { ownMsg('HATA: ' + c.err, 'err'); return false; }
-    st.src = c; st.xml = null; st.omCand = null; restoreBase(c);
+    st.src = c; restoreBase(c);
     $('srcW').value = c.nat ? c.nat[0] : c.seqW; $('srcH').value = c.nat ? c.nat[1] : c.seqH;
-    var rng = OM && OM.coverage ? OM.coverage(pts, timing) : null;
-    st.tracks = [{ clipStartSec: timing.start / TPS_, clipEndSec: timing.end / TPS_, points: mapped, kind: 'own', source: 'tether', unverified: false, file: inf.mediaPath, range: rng }];
-    var sel = $('selMask'); sel.innerHTML = ''; var o = document.createElement('option'); o.value = 0; o.textContent = 'Kendi takibim - ' + pts.length + ' kare'; sel.appendChild(o);
-    $('maskRow').classList.add('hidden'); $('omBox').classList.add('hidden'); showErr(null);
+    st.tracks = [{ clipStartSec: timing.start / TPS_, clipEndSec: timing.end / TPS_, points: mapped, kind: 'own', source: 'tether', unverified: false, file: inf.mediaPath, range: null }];
     mark('card1', true); refreshPreview(false); updateReady();
     var span = Math.round((pts[pts.length - 1].src - pts[0].src) / ft) + 1, holes = Math.max(0, span - pts.length);
     var weakN = res.frames.filter(function (f) { return f && f.conf < WEAK; }).length, weakTxt = weakN ? ' ' + weakN + ' kare zayıf güvenli (grafikte sarı).' : '';
@@ -633,9 +406,6 @@
     else ownMsg('✓ ' + pts.length + ' kare izlendi' + (t0 ? ' (' + ((Date.now() - t0) / 1000).toFixed(1) + ' sn)' : '') + '.' + (note || '') + holeTxt + weakTxt + ' Yeşil yalnızca takip sonucu üretildiğini gösterir; hedefin doğru olduğu doğrulanmadı. Kontrol edip Uygula\'ya geç.', 'ok');
     log('Kendi takibim: ' + pts.length + ' kare, konum + ölçek + dönme.' + (holes ? ' ' + holes + ' kare boş.' : ''));
     if (vm) log('UYARI: Hedef doğrulama (deneysel): ' + vm);
-    setInfo('srcInfo', '<b>' + esc(c.name) + '</b><br>Kendi takibim · ' + pts.length + ' kare', 'ok');
-    renderGrid(currentGrid());
-    setCell('gMask', LV.ok + ' Kendi takibim', 'ok'); setCell('gStatus', LV.ok + ' Takip tamamlandı', 'ok'); setCell('gTrk', LV.ok + ' ' + pts.length + ' kare · konum + ölçek + dönme', 'ok');
     var qc = qualityCell(st.tracks[0]); if (qc && qc.level !== 'good') log('UYARI: Takip kalitesi: ' + qc.text);
     return true;
   }
@@ -773,12 +543,40 @@
     var lo = 0, hi = N - 1, k;
     if (dir === 'fwd') { for (k = i + 1; k < N; k++) if (own.anchors[k]) { hi = k; break; } }
     else { for (k = i - 1; k >= 0; k--) if (own.anchors[k]) { lo = k; break; } }
+    // v2.16: duzeltme SAHNE KESMESINDE durur (baska sahnenin kareleri baska bir goruntu; oraya yazmak dogru takibi bozar). own.cutsIdx = yeni sahnenin ilk kareleri.
+    var cutLim = false, cx2 = own.cutsIdx || [], cq;
+    if (dir === 'fwd') { for (cq = 0; cq < cx2.length; cq++) if (cx2[cq] > i && cx2[cq] - 1 < hi) { hi = cx2[cq] - 1; cutLim = true; } }
+    else { for (cq = 0; cq < cx2.length; cq++) if (cx2[cq] <= i && cx2[cq] > lo) { lo = cx2[cq]; cutLim = true; } }
     own.pair = null;   // elle duzeltme gecerli sonuca uygulanir; ilk/alternatif karsilastirmasi sona erer
     own.cancel = false; ownBusyUI(true); var t0 = Date.now();
     try {
       var sub = own.frames.slice(lo, hi + 1), off = lo;
       var res2 = own.method === 'small' ? await ownSmallRun(own.info.inSec + lo / own.fps, hi - lo + 1, i - off, dir) : await OWN.trackRegionAsync(sub, own.W, own.H, i - off, own.rect, { dir: dir, method: own.method || undefined, tplCrop: own.crop || undefined, model: $('ownModel').value, adapt: $('ownAdapt').value !== '0', search: 1, searchR: ownSearchR(), searchRy: ownSearchRy(), baseScale: near ? near.scale * ratio : 1, baseRot: near ? near.rot : 0, onProgress: ownProg, cancel: function () { return own.cancel; } });
       if (!res2) return;
+      // v2.16: nokta takibi bolgede neredeyse hic ilerleyemediyse (<=5 kare: kucuk / dokusuz hedefte baslayamaz ya da hemen kaybolur) sablonla dene (Takip et'teki ayni autoPick karari; zayif/sari isaretli).
+      // Nokta takibi daha cok kare izlediyse bu blok hicbir sey yapmaz (sonuc eskisiyle ayni; kuyruk kaybi uyarisi S0 aynen).
+      var rtNote = '';
+      if (!res2.cancelled && !own.cancel && own.method !== 'small' && own.method !== 'tpl') {
+        try {
+          var rgA = dir === 'fwd' ? i - off : 0, rgB = dir === 'fwd' ? hi - off : i - off, rgN = rgB - rgA + 1, okL = 0, qq;
+          for (qq = rgA; qq <= rgB; qq++) if (res2.frames[qq]) okL++;
+          if (okL < rgN && okL <= 5) {   // YALNIZ nokta takibi neredeyse hic ilerleyemediyse (baslayamadi / hemen kayboldu). Daha cok kare izleyip sonra kaybettiyse sablonla DOLDURMA: V2 kuyruk kaybinda sablon omuza kayip yanlis kare uretti (olculdu)
+            var rtp = null, okT2 = -1, cj, crops2 = [0.7, 1];
+            for (cj = 0; cj < crops2.length && !own.cancel; cj++) {
+              var rc3 = await OWN.trackRegionAsync(sub, own.W, own.H, i - off, own.rect, { dir: dir, method: 'tpl', tplCrop: crops2[cj], model: $('ownModel').value, adapt: $('ownAdapt').value !== '0', search: 1, searchR: ownSearchR(), searchRy: ownSearchRy(), baseScale: near ? near.scale * ratio : 1, baseRot: near ? near.rot : 0, onProgress: ownProg, cancel: function () { return own.cancel; } });
+              var okC2 = 0; for (qq = rgA; qq <= rgB; qq++) if (rc3.frames[qq]) okC2++;
+              if (okC2 > okT2) { okT2 = okC2; rtp = rc3; }
+            }
+            if (rtp && okT2 > okL && !own.cancel) {
+              var pk2 = OWN.autoPick(res2, rtp, { boxW: own.rect[2] * own.W, boxH: own.rect[3] * own.H });
+              if (pk2.mode === 'template') { res2 = rtp; rtNote = ' · nokta takibi bölgenin yalnız ' + okL + '/' + rgN + ' karesini izleyebildi; şablon eşleştirmeyle ' + okT2 + ' kare izlendi (zayıf işaretli, önizlemeyi kontrol et)'; }
+              else if (pk2.mode === 'fill') { res2 = pk2.res; rtNote = ' · nokta takibi ' + okL + '/' + rgN + ' kare izledi; ' + pk2.filled + ' boş kare şablonla dolduruldu (zayıf işaretli, kontrol et)'; }
+              else { rtNote = ' · şablon sonucu nokta takibiyle çeliştiği için kullanılmadı; yalnız nokta takibinin ' + okL + '/' + rgN + ' karesi var'; }
+              log('Buradan ' + (dir === 'fwd' ? 'ileri' : 'geri') + ' takip: nokta ' + okL + '/' + rgN + ', şablon ' + okT2 + ' kare → ' + (pk2.mode === 'template' ? 'şablon kullanıldı' : pk2.mode === 'fill' ? 'boşluklar şablonla dolduruldu' : 'nokta takibi korundu'));
+            }
+          }
+        } catch (e) { log('Buradan takip: şablonla yeniden deneme atlandı: ' + (e && e.message || e)); }
+      }
       var out = own.res.frames.slice(), from = dir === 'fwd' ? i : lo, to = dir === 'fwd' ? hi : i;
       // S1: baslatma hatasi (motor ilk karede takibe baslayamadi: lostFwd/lostBwd = referans kare, tek gecerli kare = duzeltilen kare; durdurma DEGIL).
       // Bu durumda onceki takip KORUNUR; yalniz kullanicinin duzeltilen karesi yazilir (capa zaten ona aittir).
@@ -842,7 +640,7 @@
         }
       } catch (e) { }
       own.res = Object.assign({}, own.res, { frames: out });
-      await ownFinalize(own.res, t0, (res2.cancelled ? ' (durduruldu)' : '') + (hi < N - 1 && dir === 'fwd' ? ' (bir sonraki düzeltmeye kadar)' : '') + (lo > 0 && dir === 'bwd' ? ' (bir önceki düzeltmeye kadar)' : '') + sfNote + tailNote);
+      await ownFinalize(own.res, t0, (res2.cancelled ? ' (durduruldu)' : '') + (hi < N - 1 && dir === 'fwd' ? ' (bir sonraki düzeltmeye kadar)' : '') + (lo > 0 && dir === 'bwd' ? ' (bir önceki düzeltmeye kadar)' : '') + (cutLim ? ' (sahne kesmesine kadar)' : '') + sfNote + rtNote + tailNote);
       showScrub(i);
     } catch (e) { ownMsg('HATA: ' + e, 'err'); log('HATA: Kendi takibim (yeniden): ' + (e && e.stack || e)); }
     finally { ownBusyUI(false); }
@@ -894,7 +692,7 @@
 
   // Hesapla + kareye oturt + tekrarları ele
   function compute(tgt, quiet) {
-    var t = st.tracks[Number($('selMask').value) || 0], o = buildOpts(tgt);
+    var t = st.tracks[0], o = buildOpts(tgt);
     if (o.mode === 'follow' && $('zoomMode').value === 'fixed' && $('autoZoom').checked) {
       var z = MaskParser.autoZoom(t.points, o);
       if (z > 1000) { if (!quiet) log('UYARI: Kenarsız kadraj için %' + z + ' zoom gerekir; 1000 ile sınırlandı. Dinamik zoom\'u aç, nesneyi ortalamak yerine Nesne X/Y konumunu kenara kaydır ya da Ölü bölge kullan.'); z = 1000; }
@@ -1199,6 +997,7 @@
     var follow = $('mode').value === 'follow';
     var targets = follow && st.src ? [st.src] : st.tgts;
     if (!targets.length) return log('Önce hedef klibi seç.');
+    if (!window.confirm('Hedefin animasyonu silinsin ve orijinal değere dönülsün mü?')) return;
     busy(true);
     try {
       for (var i = 0; i < targets.length; i++) {
@@ -1225,7 +1024,7 @@
   $('bRaw').onclick = function () {
     if (!st.tracks.length) return log('Önce klibi seç ve takip et.');
     try {
-      var t = st.tracks[Number($('selMask').value) || 0], n = (t.points[0].raw || []).length, h = ['sn'], i;
+      var t = st.tracks[0], n = (t.points[0].raw || []).length, h = ['sn'], i;
       for (i = 0; i < n; i++) h.push('f' + i);
       var rows = t.points.map(function (p) { return (p.tl - t.clipStartSec).toFixed(4) + ',' + (p.raw || []).map(function (v) { return +v.toFixed(5); }).join(','); });
       var f = path.join(outDir(), 'tether_ham_takip.csv');
@@ -1233,42 +1032,6 @@
       log('Ham takip verisi yazıldı: ' + f + ' (' + t.points.length + ' kare, ' + n + ' değer). Bu dosyayı bana gönder: ölçek/döndürme sütunlarını bulup onları da takibe katarım.');
     } catch (e) { log('HATA: ' + e); }
   };
-  $('bScan').onclick = function () {
-    if (!st.xml || !st.src) return log('Önce "Seçili klibi al" ile klibi seç (proje okunsun).');
-    try {
-      var txt = MaskParser.scan(st.xml, Number(st.src.startTicks), st.src.name);
-      var f = path.join(outDir(), 'tether_tarama.txt');
-      fs.writeFileSync(f, txt, 'utf8');
-      log('Tarama yazıldı: ' + f + ' (' + txt.split('\n').length + ' satır). Bu dosyayı bana gönder.');
-    } catch (e) { log('HATA: ' + e); }
-  };
-  $('bFind').onclick = async function () {
-    if (!st.xml || !st.src) return log('Önce Object Mask klibini seç ve "Seçili klibi al"a bas (proje okunsun).');
-    var g = MaskParser.guids(st.xml);
-    if (!g.length) return log('Tracker içinde GUID referansı bulunamadı; bu klip için dış veri araması gerekmiyor.');
-    busy(true); log('Aranıyor (en fazla ~45 sn): ' + g.length + ' GUID...');
-    try {
-      var projDir = ''; try { var sp = await evJson('ppSaveProject()'); if (sp.ok) projDir = path.dirname(sp.path); } catch (e0) {}
-      var r = await MaskFinder.run({ guids: g, projectDir: projDir });
-      var hits = r.nameHits.concat(r.contentHits.map(function (h) { return h.replace(/ \(\d+ bayt\)$/, ''); })).filter(function (h, i, a) { return a.indexOf(h) === i; });
-      var extra = '';
-      if (OM) {
-        // bulunan dosyalar onbellege yazilir ve bicimleri analiz edilir (sadece okur)
-        hits.slice(0, 20).forEach(function (h) {
-          var p = h.replace(/\s+\[KLASOR\]$/, ''), low = p.toLowerCase();
-          g.forEach(function (gg) { if (low.indexOf(gg) >= 0 || low.indexOf(gg.replace(/-/g, '')) >= 0) OM.reader.cachePut(gg, p); });
-        });
-        extra = '\n\n=== Bulunan dosyaların biçim analizi (v1.9) ===\n' + (hits.length ? hits.slice(0, 10).map(function (h) { var p = h.replace(/\s+\[KLASOR\]$/, ''); return p + '\n' + OM.diagnostics.fileReport(p).join('\n'); }).join('\n\n') : '(dosya yok)');
-      }
-      var f = path.join(outDir(), 'tether_cache_arama.txt'); fs.writeFileSync(f, r.text + extra, 'utf8');
-      log('Bitti: adında GUID geçen ' + r.nameHits.length + ', içinde GUID geçen ' + r.contentHits.length + ' dosya. Rapor: ' + f + ' — bu dosyayı bana gönder.');
-    } catch (e) { log('HATA: ' + e); } finally { busy(false); }
-  };
-  $('bOmReport').onclick = function () {
-    if (!st.src || !st.diag.detection) return log('Önce "Analiz et" ile klibi analiz et.');
-    var f = writeOmReport(false); if (f) log('Raporu bana gönderirsen Object Mask biçimini inceleyebilirim.');
-  };
-  $('bOmCache').onclick = function () { if (OM) { OM.reader.cacheClear(); log('Object Mask dosya önbelleği temizlendi.'); } };
   $('bDiagCopy').onclick = function () {
     renderDiag();
     var txt = (st.diagRows || []).map(function (r) { return r[0] + ': ' + r[1]; }).join('\n');
@@ -1289,7 +1052,7 @@
     if (!st.tracks.length) return log('Önce klibi seç ve takip et.');
     try {
       var f = path.join(outDir(), 'tether_debug.json');
-      fs.writeFileSync(f, JSON.stringify({ src: st.src, tgts: st.tgts, track: st.tracks[Number($('selMask').value) || 0] }, null, 1), 'utf8');
+      fs.writeFileSync(f, JSON.stringify({ src: st.src, tgts: st.tgts, track: st.tracks[0] }, null, 1), 'utf8');
       log('Debug dosyası yazıldı: ' + f);
     } catch (e) { log('HATA: ' + e); }
   };
@@ -1352,6 +1115,6 @@
     try { if (ac) { ac.checked = upd.readState().autoCheck !== false; ac.onchange = function () { upd.setAutoCheck(ac.checked); }; } } catch (e) {}
     try { if (upd.shouldAutoCheck(24)) setTimeout(function () { check(true); }, 3000); } catch (e) {}
   })();
-  log('Hazır. Tether v' + PLUGIN_VERSION + (OM ? '' : ' (Object Mask modülü yüklenemedi; diğer özellikler çalışır)'));
+  log('Hazır. Tether v' + PLUGIN_VERSION);
   try { if (window.__tetherMarkHealthy) window.__tetherMarkHealthy(); } catch (e) {}   // v2.15: main.js hatasiz sonuna kadar calistiysa acilis sagliklidir (erken kapatma yanlis geri almaya yol acmasin)
 })();

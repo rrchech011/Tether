@@ -5,7 +5,7 @@
 <div id="updBar" class="hidden"><span id="updBarTxt"></span><span id="updBarPct"></span><button id="updBarBtn" class="hidden"></button><i id="updBarFill"></i></div>
 
 <header>
- <h1 title="Klibi takip edilen nesneye bağlar">Tether<span>v2.15.0</span></h1>
+ <h1 title="Klibi takip edilen nesneye bağlar">Tether<span>v2.16.0</span></h1>
  <nav class="tabs">
   <button class="tab on" data-page="pTrack">Takip</button>
   <button class="tab" data-page="pSet">Ayarlar</button>
@@ -29,27 +29,7 @@
  <section class="page on" id="pTrack">
   <div class="card stepc" id="card1">
    <div class="steprow" style="margin-bottom:8px"><i class="num"><span>1</span></i><b class="stitle">Takip kaynağı</b></div>
-   <div class="seg hidden" id="srcSeg"><button data-src="own">Kendi takibim</button><button data-src="mask">Premiere maskesi (eski)</button></div>
-   <div id="paneMask" style="margin-top:10px">
-    <div class="steprow"><div class="stepmain"><div class="info" id="srcInfo">Takip edilecek klibi seç.</div></div><button id="bSrc" class="act" title="Timeline'da seçili klibi okur, projeyi kaydeder, maskeleri algılar ve takip verisini okur">Analiz et</button></div>
-   <ol id="stages" class="stages hidden"></ol>
-   <dl id="stGrid" class="stgrid hidden">
-    <dt>Kaynak</dt><dd id="gSrc">—</dd>
-    <dt>Takip türü</dt><dd id="gMask">—</dd>
-    <dt>Durum</dt><dd id="gStatus">—</dd>
-    <dt>Veri (PRMF)</dt><dd id="gData">—</dd>
-    <dt>Takip</dt><dd id="gTrk">—</dd>
-    <dt>Takip aralığı</dt><dd id="gRange">—</dd>
-    <dt>Keyframe</dt><dd id="gKf">—</dd>
-    <dt>Süre</dt><dd id="gDur">—</dd>
-    <dt>Takip kalitesi</dt><dd id="gQual">—</dd>
-   </dl>
-   <div id="omBox" class="ombox hidden"><p id="omMsg"></p><button id="bOmUse" class="primary">Object Mask takibini uygula</button></div>
-   <details id="errBox" class="errbox hidden"><summary id="errTitle"></summary><div id="errDetail"></div></details>
-   <div class="field hidden" id="maskRow" style="margin-top:8px"><label>Maske</label><select id="selMask"></select></div>
-  
-   </div>
-   <div id="paneOwn" class="hidden" style="margin-top:10px">
+   <div id="paneOwn" style="margin-top:10px">
    <p class="hint" style="margin-top:0">Klibi seç, nesnenin göründüğü kareye git, <b>Kare al</b>'a bas, nesnenin üstüne dikdörtgen çiz, sonra <b>Takip et</b>.</p>
    <button id="bOwnFrame" class="act">Kare al</button>
    <div id="ownBox" class="hidden">
@@ -75,7 +55,8 @@
     <div class="field"><label for="ownDir">Yön</label><select id="ownDir"><option value="both">İki yön</option><option value="fwd">Yalnız ileri</option><option value="bwd">Yalnız geri</option></select></div></div>
     <div class="row"><div class="field"><label for="ownRes">Çözünürlük</label><select id="ownRes"><option value="480">Hızlı</option><option value="640" selected>Dengeli</option><option value="960">Hassas</option></select></div></div>
    </details>
-   <button id="bOwnRun" class="primary run" disabled style="margin-top:10px">Takip et</button>
+   <p class="hint" id="runWhy" style="margin:10px 0 0">Takip et için önce <b>Kare al</b>'a bas ve nesnenin üstüne dikdörtgen çiz.</p>
+   <button id="bOwnRun" class="primary run" disabled style="margin-top:8px">Takip et</button>
   </div>
   </div>
   </div>
@@ -109,6 +90,9 @@
    <p class="hint" id="modeDesc"></p>
    <div class="field" id="smoothRow" style="margin:10px 0 0"><label for="smooth">Yumuşatma <span class="out" id="smoothOut">0</span></label>
     <input id="smooth" type="range" min="0" max="30" value="0"><small>0 = kapalı. Titremeyi azaltır; 3-6 çoğu çekimde yeterli.</small></div>
+   <div class="field" id="applyRow" style="margin:10px 0 0"><label for="applyTo">Nereye uygulansın?</label><select id="applyTo"><option value="motion">Motion (normal)</option><option value="xform">Transform efekti (hareket bulanıklığı için)</option></select></div>
+   <div class="field hidden" id="shutRow" style="margin:8px 0 0"><input id="shutterAng" type="number" value="180" min="0" max="360"><small>Shutter Angle (°) — 0 = bulanıklığa dokunma</small></div>
+   <p class="hint hidden" id="xfHint" style="margin-top:6px">Transform'da hareket bulanıklığı (Shutter Angle) kullanılır. Klipte efekt yoksa Tether eklemeyi dener; olmazsa Effects &gt; Video Effects &gt; Distort &gt; Transform'u elle sürükle.</p>
   </div>
 
 
@@ -145,13 +129,6 @@
    <div class="row"><div class="field"><input id="offX" type="number" value="0"><small>X</small></div><div class="field"><input id="offY" type="number" value="0"><small>Y</small></div></div>
    <label class="sw" style="margin-top:10px"><span>Yazıyı nesnenin tam üstüne oturt<small>Yazı / grafik klibinde yazının kendi konumunu hesaba katar (yalnız "Üstüne taşı").</small></span><input id="txtComp" type="checkbox" checked></label>
   </div>
-  <details class="card adv" id="applyBox">
-   <summary><b>Uygulama yeri</b> <small>Motion (varsayılan) veya Transform</small></summary>
-   <div style="margin-top:8px"></div>
-   <div class="field"><select id="applyTo"><option value="motion">Motion (Effect Controls &gt; Motion)</option><option value="xform">Transform efekti (hareket bulanıklığı için)</option></select></div>
-   <div class="field hidden" id="shutRow" style="margin-top:8px"><input id="shutterAng" type="number" value="180" min="0" max="360"><small>Shutter Angle (°) — 0 = bulanıklığa dokunma</small></div>
-   <p class="hint" id="xfHint" style="margin-top:6px">Transform'da hareket bulanıklığı (Shutter Angle) kullanılır. Klipte efekt yoksa Tether eklemeyi dener; olmazsa Effects &gt; Video Effects &gt; Distort &gt; Transform'u elle sürükle.</p>
-  </details>
  </section>
 
  <!-- ===== AYARLAR ===== -->
@@ -166,7 +143,8 @@
   <div class="card">
    <h2>Genel</h2>
    <label class="sw"><span>Önceki keyframe'leri koru<small>Aynı klibe tekrar uygularsan yalnız yeni takibin aralığı değişir, önceki sahneler silinmez.</small></span><input id="keepOld" type="checkbox" checked></label>
-   <button id="bResetSettings" style="margin-top:10px">Ayarları varsayılana döndür</button>
+   <div class="field" style="margin:10px 0 0"><label for="langSel">Dil / Language</label><select id="langSel"><option value="tr">Türkçe</option><option value="en">English</option></select></div>
+  <button id="bResetSettings" style="margin-top:10px">Ayarları varsayılana döndür</button>
    <p class="hint" style="margin-top:4px">Keyframe'lere dokunmaz. Animasyonu silmek için alttaki <b>Animasyonu sıfırla</b>.</p>
   </div>
 
@@ -194,26 +172,19 @@
   <details class="card adv" id="diagBox">
    <summary><b>Teşhis bilgisi</b></summary>
    <dl id="diagGrid" class="stgrid"></dl>
-   <div class="row"><button id="bDiagCopy">Kopyala</button><button id="bOmReport" title="Object Mask algılama, arama ve dosya analizi raporunu masaüstüne yazar">Object Mask raporu</button></div>
+   <div class="row"><button id="bDiagCopy">Kopyala</button></div>
   </details>
   <details class="card adv" id="updBox">
    <summary><b>Güncelleme</b> <small>(test)</small></summary>
    <div class="tool"><button id="bUpdCheck">Güncellemeleri denetle</button><p id="updMsg">Henüz denetlenmedi.</p></div>
    <label class="sw" style="margin-top:6px"><span>Güncellemeleri otomatik kur<small>Açılışta günde bir denetler, yeni sürümü indirir, doğrular ve kurar; Premiere'i kapatmana gerek yok, panel kendini yeniler. Kapalıysa kendiliğinden denetlemez; "Güncellemeleri denetle" ile elle bakarsın, bulursa üstte "Güncelle" düğmesi çıkar.</small></span><input id="updAuto" type="checkbox" checked></label>
   </details>
-  <details class="card adv">
-   <summary><b>Premiere maskesi araçları</b> <small>(eski yöntem)</small></summary>
-   <label class="sw" style="margin-top:8px"><span>Object Mask takibini düzelt<small>Nesne kaybı olan uç kareleri kırpar, kutu titremesini giderir.</small></span><input id="omFix" type="checkbox" checked></label>
-   <div class="tool"><button id="bScan">Proje taraması</button><p>Projedeki maske yapısını masaüstüne yazar.</p></div>
-   <div class="tool"><button id="bFind">Object Mask verisini ara (derin)</button><p>Adobe klasörlerinde GUID'li dosyaları arar (yalnızca okur).</p></div>
-   <div class="tool"><button id="bOmCache">Object Mask önbelleğini temizle</button><p>Sonraki analiz dosyaları yeniden arar.</p></div>
-  </details>
  </section>
 
  <!-- ===== GUNLUK ===== -->
  <section class="page" id="pLog">
   <div id="log"></div>
-  <p style="text-align:right;margin:6px 0 0"><button class="link" id="bClear">Günlüğü temizle</button></p>
+  <p class="logbar"><button class="link" id="bCopyLog">Günlüğü kopyala</button><button class="link" id="bClear">Günlüğü temizle</button></p>
  </section>
 </main>
 
@@ -228,9 +199,9 @@
  </div>
 </footer>
 
+<script src="js/i18n_en.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/parser.js"></script>
-<script src="js/finder.js"></script>
-<script src="js/objectmask.js"></script>
 <script src="js/track.js"></script>
 <script src="js/updater.js"></script>
 <script src="js/main.js"></script>

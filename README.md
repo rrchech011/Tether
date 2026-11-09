@@ -1,5 +1,7 @@
 # Tether — Premiere Pro için After Effects tarzı takip (CEP paneli)
 
+> **English:** Tether tracks an object frame by frame in Premiere Pro and writes the motion to a target clip's Position / Scale / Rotation. Install: run `kur.bat` (Windows) or `kur.command` (Mac), restart Premiere, open Window > Extensions > Tether. Use: select clip → **Grab frame** → draw a box over the object → **Track** → select target clip(s) → pick a mode → **Apply**. The interface is available in English and Turkish (Settings > General > "Dil / Language"). ffmpeg is downloaded once during install (~170 MB, with a progress bar).
+
 Premiere Pro'da bir nesneyi (yüz, kafa, top, çizgi film karakteri…) kare kare izleyip klibin Position / Scale / Rotation keyframelerine çevirir.
 
 ## Nasıl çalışır

@@ -16,9 +16,12 @@ if defined HAVEFF (
   echo ffmpeg zaten kurulu, indirme atlandi.
 ) else (
   echo.
-  echo ffmpeg bulunamadi, indiriliyor ^(tek seferlik, yaklasik 170 MB^)... lutfen bekle.
+  echo ffmpeg bulunamadi, indiriliyor ^(tek seferlik, yaklasik 170 MB^)... lutfen bekle ^(ilerleme cubugu asagida gorunur^).
   if not exist "%KEEP%" mkdir "%KEEP%"
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $z=Join-Path $env:TEMP 'tether_ffmpeg.zip'; $d=Join-Path $env:TEMP 'tether_ffmpeg'; Invoke-WebRequest -UseBasicParsing 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip' -OutFile $z; if(Test-Path $d){Remove-Item $d -Recurse -Force}; Expand-Archive -LiteralPath $z -DestinationPath $d -Force; $e=Get-ChildItem $d -Recurse -Filter ffmpeg.exe | Select-Object -First 1; Copy-Item $e.FullName '%KEEP%\ffmpeg.exe' -Force; Remove-Item $z,$d -Recurse -Force"
+  if exist "%TEMP%\tether_ffmpeg.zip" del /f /q "%TEMP%\tether_ffmpeg.zip"
+  where curl.exe >nul 2>nul && curl.exe -L --fail --progress-bar -o "%TEMP%\tether_ffmpeg.zip" "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip" || del /f /q "%TEMP%\tether_ffmpeg.zip" 2>nul
+  if not exist "%TEMP%\tether_ffmpeg.zip" ( echo Alternatif yontem deneniyor ^(ilerleme gosterilmez^)... & powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip' -OutFile $env:TEMP\tether_ffmpeg.zip" )
+  if exist "%TEMP%\tether_ffmpeg.zip" ( echo Indirme tamam, dosyalar cikariliyor... & powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; $z=Join-Path $env:TEMP 'tether_ffmpeg.zip'; $d=Join-Path $env:TEMP 'tether_ffmpeg'; if(Test-Path $d){Remove-Item $d -Recurse -Force}; Expand-Archive -LiteralPath $z -DestinationPath $d -Force; $e=Get-ChildItem $d -Recurse -Filter ffmpeg.exe | Select-Object -First 1; Copy-Item $e.FullName '%KEEP%\ffmpeg.exe' -Force; Remove-Item $z,$d -Recurse -Force" )
   if exist "%KEEP%\ffmpeg.exe" ( echo ffmpeg kuruldu. ) else ( echo UYARI: ffmpeg indirilemedi. Internete bagli oldugundan emin ol ve kur.bat'i tekrar calistir. )
 )
 if exist "%EXT%\MaskTakip" rmdir /S /Q "%EXT%\MaskTakip"

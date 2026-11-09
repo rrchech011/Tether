@@ -1,7 +1,19 @@
-TETHER  v2.15.0
+TETHER  v2.16.0
 ==============
 Premiere Pro paneli: videodaki bir nesneyi (yuz, kafa, top...) kare kare izler ve
 hedef klibin Position / Scale / Rotation animasyonuna cevirir (After Effects tarzi takip).
+
+ENGLISH (short)
+  Tether tracks an object (face, head, ball...) frame by frame in a video and turns it into Position / Scale / Rotation animation on a target clip in Premiere Pro (After Effects-style tracking).
+  Install: Windows - double-click kur.bat; Mac - run kur.command. Then restart Premiere: Window > Extensions > Tether.
+  (kur.bat downloads ffmpeg once, ~170 MB, with a progress bar; it needs internet.)
+  Use: select the clip, go to the frame where the object is visible, press "Grab frame", draw a box over the object, press "Track".
+  Then select the target clip(s), press "Get selected clips", pick a mode and press "Apply".
+  Language: Settings > General > "Dil / Language" (Turkish / English). New installs follow the system language.
+  What's new in v2.16.0: English interface; tracking continues after a scene cut when you re-track from there (small objects too);
+  "Apply to" (Motion / Transform) moved into the Mode card; clearer hints (why "Track" is disabled); confirmation before "Reset animation";
+  "Copy log" button; ffmpeg download progress bar in kur.bat; the old Object Mask / Premiere mask code was removed (the own tracking engine is the only source now).
+  Known limits: very fast or occluded small objects can drift; perspective / planar tracking is not supported; very fast targets can lag slightly.
 
 KURULUM
   Windows : kur.bat dosyasina cift tikla
@@ -16,6 +28,15 @@ KULLANIM (Takip sekmesi)
   Onizleme ustte: ayar degistikce canli guncellenir; kare kaydirici, oynat, ve onizlemede
   surukleyerek hedef konumu / kadraj konumu ayarlanir. Alttaki tutacla boyutu degistir
   (cift tikla: kucult/buyut).
+
+v2.16.0:
+  - INGILIZCE DESTEK: Ayarlar > Genel > "Dil / Language". Eski kullanicida Turkce kalir; yeni kurulum sistem diline uyar. Arayuz, gunluk, uyarilar ve guncelleyici mesajlari cevrildi.
+  - SAHNE DEGISIMINDEN SONRA TAKIP: "Buradan ileri / geri takip" artik sahne kesmesini sinir alir (o sahnede durur) ve kucuk / dusuk dokulu hedeflerde nokta takibi hic baslayamazsa veya erken kaybederse sablon eslestirmeyle kurtarir; mesajda "(sahne kesmesine kadar)" yazar.
+  - "Uygulama yeri" (Motion / Transform + Shutter Angle) katlanir kutudan cikip Mod kartina tasindi.
+  - "Takip et" pasifken nedenini soyleyen ipucu; "Animasyonu sifirla" onay sorar; Gunluk'e "Gunlugu kopyala"; Teshis kutusu sadelesti.
+  - kur.bat: ffmpeg indirirken ilerleme cubugu (curl.exe; olmazsa eski yontem). kur.command: ilerleme cubugu.
+  - Object Mask ve Premiere maske okuma kodu KALDIRILDI (js/objectmask.js, js/finder.js, ilgili arayuz). Takip motoru (track.js), parser.js ve host.jsx DEGISMEDI. Eski surumden guncellenen kurulumlarda bu iki eski dosya klasorde kalabilir; kullanilmaz, zararsizdir.
+  - BILINEN SINIRLAR: hizli hedefte hafif geri kalma (neden henuz kanitlanmadi); LK kaybindan sonra kuyruk kaybinda yalniz uyari verilir; perspektif takibi yok; "yalnizca nokta" yontemi cok kucuk hedefte baslayamayabilir (sablon kurtarmasi dar kosullarda devreye girer).
 
 v2.15.0:
   - YENI ARAYUZ: koyu patlican zemin, tek mor aksan; adimlar (1 kaynak, 2 hedef, 3 mod) bir ip ile birbirine baglanir. Is mantigi ve takip motoru DEGISMEDI.
