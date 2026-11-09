@@ -2,6 +2,10 @@
 
 [English](README.md) · **Türkçe**
 
+![Tether demo: kare al, kutu çiz, takip et, uygula](docs/demo.webp)
+
+<sub>[Videoyu MP4 olarak izle](docs/demo.mp4)</sub>
+
 Premiere Pro'da bir nesneyi (yüz, kafa, top, çizgi film karakteri…) kare kare izleyip klibin Position / Scale / Rotation keyframelerine çevirir.
 
 ## Nasıl çalışır

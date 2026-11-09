@@ -2,6 +2,10 @@
 
 **English** · [Türkçe](README.tr.md)
 
+![Tether demo: grab a frame, draw a box, track, apply](docs/demo.webp)
+
+<sub>[Watch as video (MP4)](docs/demo.mp4)</sub>
+
 Tether follows an object in your video (a face, a head, a ball, a cartoon character…) frame by frame and turns its movement into Position / Scale / Rotation keyframes on another clip. Use it to stick a name tag to a player, lock a crosshair onto a target, stabilize shaky footage, or follow a subject with a smooth virtual camera.
 
 The panel is available in **English and Turkish**. Change it in *Settings > General > "Dil / Language"*. New installs follow your system language.
