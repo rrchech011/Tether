@@ -1,32 +1,58 @@
-# Tether — Premiere Pro için After Effects tarzı takip (CEP paneli)
+# Tether — After Effects–style tracking for Premiere Pro (CEP panel)
 
-> **English:** Tether tracks an object frame by frame in Premiere Pro and writes the motion to a target clip's Position / Scale / Rotation. Install: run `kur.bat` (Windows) or `kur.command` (Mac), restart Premiere, open Window > Extensions > Tether. Use: select clip → **Grab frame** → draw a box over the object → **Track** → select target clip(s) → pick a mode → **Apply**. The interface is available in English and Turkish (Settings > General > "Dil / Language"). ffmpeg is downloaded once during install (~170 MB, with a progress bar).
+**English** · [Türkçe](README.tr.md)
 
-Premiere Pro'da bir nesneyi (yüz, kafa, top, çizgi film karakteri…) kare kare izleyip klibin Position / Scale / Rotation keyframelerine çevirir.
+Tether follows an object in your video (a face, a head, a ball, a cartoon character…) frame by frame and turns its movement into Position / Scale / Rotation keyframes on another clip. Use it to stick a name tag to a player, lock a crosshair onto a target, stabilize shaky footage, or follow a subject with a smooth virtual camera.
 
-## Nasıl çalışır
-1. Klip seç → **Kare al** → nesnenin üstüne **Takip bölgesi** (mavi) çiz. Turuncu **Arama bölgesi** kenarlarından ayarlanır.
-2. **Takip et**. Yöntem *Otomatik*: önce nokta takibi (Lucas-Kanade piramidi, ileri-geri doğrulama); zayıfsa şablon eşleştirme (ZNCC) ile boşlukları doldurur.
-3. Güven grafiğinde sarı/kırmızı karelere git, kutuyu nesneye çek, **Buradan ileri / geri takip**. Düzelttiğin kareler çapa olur, yeniden takip bir sonraki çapada durur.
-4. Hedef klibi seç, modu seç, **Uygula**.
+The panel is available in **English and Turkish**. Change it in *Settings > General > "Dil / Language"*. New installs follow your system language.
 
-Önizleme ve "Kare al" görüntüsü yakınlaştırılabilir (+ / − düğmeleri, fare tekerleği; kaydırma: orta/sağ tuş ya da Boşluk+sürükle). Fare imleci gibi küçük nesneler için Yöntem > **İmleç / küçük nesne** (yerel çözünürlükte, arka plandan ayırarak izler).
+## How it works
 
-## Kurulum
-Windows: `kur.bat`, Mac: `kur.command` dosyasını çalıştır. Premiere'i yeniden aç: Window > Extensions > Tether.
+1. Select the clip you want to track in the timeline and move the playhead to a frame where the object is clearly visible.
+2. Press **Grab frame**, then draw a rectangle over the object. This is the blue **tracking area**. The orange **search area** can be resized from its edges.
+3. Press **Track**. With the default method (*Automatic*), Tether first uses point tracking (pyramidal Lucas–Kanade with forward–backward checking). If that is weak, it fills the gaps with template matching (ZNCC).
+4. Check the confidence chart under the frame. Yellow frames are weak and red frames are untracked. Go to such a frame, drag the box onto the object and press **Track forward / backward from here**. The frames you correct become anchors, and re-tracking stops at the next anchor or at a scene cut.
+5. Select the **target clip(s)**, choose a **mode** and press **Apply**. Press **Undo** to restore the previous state.
 
-**ffmpeg** (yalnızca videodan kare okumak için) kurulum sırasında yoksa otomatik indirilir (tek seferlik, yaklaşık 170 MB, internet gerekir). İndirme başarısız olursa `ffmpeg.exe` dosyasını `%APPDATA%\Adobe\CEP\Tether_ffmpeg` klasörüne (Mac: `~/Library/Application Support/Adobe/CEP/Tether_ffmpeg`) elle koyabilirsin; sistem PATH'inde ffmpeg varsa o da kullanılır. ffmpeg bu depoyla dağıtılmaz; ayrı bir projedir (ffmpeg.org).
+Tips:
 
-## Bilinen sınırlar
-Çok hızlı / kapanan küçük nesneler (ör. bacağa değen top) kayabilir; sahne kesmesinde elle düzeltme gerekir. İki noktalı / perspektif / düzlem takibi yok.
+- The preview and the "Grab frame" image can be zoomed (+ / − buttons or the mouse wheel). To pan, hold the middle or right mouse button, or hold Space and drag.
+- For tiny objects such as a mouse cursor in a screen recording, choose *Tracking settings > Method > Cursor / small object*. It tracks at native resolution and separates the object from the background.
+- Modes include: move a title or graphic onto the object, stabilize the clip, and reframe (zoom in and keep the object in frame). Presets for common gaming use cases (name tag, crosshair, smooth kill-cam) are in the *Mode* card.
+- *Apply to* lets you write the animation to **Motion** (normal) or to a **Transform** effect (needed for motion blur via Shutter Angle).
 
-## Geliştirme notları
-Takip kodu: `Tether/js/track.js` (tarayıcıdan ve Node'dan çalışır). Test: ffmpeg ile kare okuyup `trackRegion` çağır.
+## Installation
 
-## Güvenlik ve izinler
-- Premiere imzasız (unsigned) paneller için **PlayerDebugMode** ister. `kur.bat` / `kur.command` bunu kullanıcı hesabında açar (Windows: `HKCU\Software\Adobe\CSXS.*`, Mac: `defaults write com.adobe.CSXS.*`). Geri almak için `sil.bat` veya bu anahtarı elle silmek yeterli.
-- Panel, seçtiğin klibin medya dosyasını yalnızca yerel ffmpeg ile okur; internete veri göndermez. İnternet yalnızca kurulumda ffmpeg indirmek için kullanılır.
-- Kurulum betiklerini çalıştırmadan önce okuyabilirsin: kısa ve düz metin.
+- **Windows:** double-click `kur.bat`.
+- **Mac:** run `kur.command`.
 
-## Lisans
-Depodaki `LICENSE` dosyasına bak.
+Then restart Premiere Pro and open *Window > Extensions > Tether*.
+
+**ffmpeg** is used only to read frames from your video. If it is not found, the installer downloads it once (about 170 MB, internet required) and shows a progress bar. If the download fails, copy `ffmpeg.exe` to `%APPDATA%\Adobe\CEP\Tether_ffmpeg` (Mac: `~/Library/Application Support/Adobe/CEP/Tether_ffmpeg`) by hand. An ffmpeg in your system `PATH` is used too. ffmpeg is a separate project (ffmpeg.org) and is not distributed with this repository.
+
+To uninstall, run `sil.bat`.
+
+### Updating
+
+Open *Tools > Updates* in the panel. Tether can check GitHub once a day, download the new release, verify its checksum and install it without closing Premiere. You can also reinstall at any time with `kur.bat` / `kur.command`.
+
+## Known limits
+
+- Very fast, tiny or occluded objects (for example a ball that touches a leg) can drift. Very fast targets may lag slightly behind.
+- Scene cuts need a manual fix: tracking stops at the cut, so go to the new scene, draw the box and press **Track forward from here**.
+- There is no two-point, perspective or planar tracking.
+
+## Security and permissions
+
+- Premiere requires **PlayerDebugMode** for unsigned panels. `kur.bat` / `kur.command` enable it for your user account only (Windows: `HKCU\Software\Adobe\CSXS.*`, Mac: `defaults write com.adobe.CSXS.*`). To undo it, run `sil.bat` or delete that registry key / setting yourself.
+- The panel reads your clip's media file with the local ffmpeg only and does not upload your video or tracking data anywhere.
+- The only network connections are the one-time ffmpeg download during installation and the optional update check against this repository's GitHub releases. Automatic updates can be turned off in *Tools > Updates*.
+- The install scripts are short plain text; you can read them before running them.
+
+## Development notes
+
+The tracking engine is `Tether/js/track.js`. It runs in the browser and in Node. To test it, read frames with ffmpeg and call `trackRegion`. The user interface is `index.html`, `css.css` and `Tether/js/main.js`, `ui.js`, `preview.js`. The Premiere (ExtendScript) side is `Tether/jsx/host.jsx`. Translations live in `Tether/js/i18n_en.js` and `i18n.js`.
+
+## License
+
+See the `LICENSE` file in this repository.
