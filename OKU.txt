@@ -37,6 +37,7 @@ v2.16.1:
   - ONIZLEME: surukleme noktasi halka + "surukle" etiketiyle gorunur; altta moda gore ne yaptigini soyleyen cumle ve anlik deger (Yatay/Dikey % ya da X/Y px); "Ortala / sifirla".
   - SAYI KUTULARI: Premiere gibi saga / sola surukleyerek degistir (Shift = hizli) ya da tiklayip elle yaz. Surukleme sirasinda onizleme canli guncellenir, Premiere'e yazma birakinca bir kez yapilir. Takip sekmesindeki kutular da artik onizlemeyi guncelliyor.
   - ONCEKI TAKIBE DON: "Takip et"e tekrar basinca onceki sonuc saklanir; "Onceki takibe don" / "Yeni takibe don" ikisi arasinda gecis yapar (yalniz tam takip; "Buradan ileri/geri" kismi duzeltmeleri kapsamaz).
+  - OTOMATIK GUNCELLEME: acilista artik her seferinde denetler (eskiden 24 saat kapisi vardi, elle denetim de bu sayaci yeniliyordu). "Otomatik kur" kapaliysa da denetler; kurmaz, ustte "Guncelle" bari gosterir.
   - IPUCLARI: Sabitle nasil kullanilir (sabit nokta sec, yalniz kaymayi duzeltir), kadraj takibinde kenar siniri, takip modeli secimi.
   - track.js, parser.js ve host.jsx DEGISMEDI.
 

@@ -1142,7 +1142,8 @@
     var ac = $('updAuto');
     $('bUpdCheck') && ($('bUpdCheck').onclick = function () { check(false); });
     try { if (ac) { ac.checked = upd.readState().autoCheck !== false; ac.onchange = function () { upd.setAutoCheck(ac.checked); }; } } catch (e) {}
-    try { if (upd.shouldAutoCheck(24)) setTimeout(function () { check(true); }, 3000); } catch (e) {}
+    // Açılışta her seferinde denetle (tek hafif istek). Otomatik kurma kapalıysa yalnız haber verir (üstte "Güncelle" barı), kurmaz.
+    try { setTimeout(function () { check(true); }, 3000); } catch (e) {}
   })();
   log('Hazır. Tether v' + PLUGIN_VERSION);
   try { if (window.__tetherMarkHealthy) window.__tetherMarkHealthy(); } catch (e) {}   // v2.15: main.js hatasiz sonuna kadar calistiysa acilis sagliklidir (erken kapatma yanlis geri almaya yol acmasin)
