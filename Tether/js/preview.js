@@ -9,12 +9,25 @@
   var view = { z: 1, px: 0.5, py: 0.5 }, ZMIN = 0.25, ZMAX = 24, spaceDown = false, pan = null;   // yakinlastirma: z (1 = sigdir), (px,py) = tuval merkezindeki kare noktasi (0-1)
   var MIN_SHOW = 40, DEF_H = Math.max(64, Math.min(130, Math.round(window.innerHeight * 0.17)));   // panel boyuna gore
 
+  var SW = function (c) { return '<i style="background:' + c + '"></i>'; };
   var LEG = {
-    attach: '<i style="background:#f97316"></i>nesne<i style="background:#38bdf8"></i>hedef · sürükle: hedefin yeri',
-    snap: '<i style="background:#f97316"></i>nesne<i style="background:#38bdf8"></i>hedef · sürükle: nesneye göre yeri',
-    stabilize: '<i style="background:#f97316"></i>nesne<i style="background:#38bdf8"></i>hedefin yeni konumu',
-    follow: '<i style="background:#f97316"></i>nesne<i style="background:#38bdf8"></i>nesnenin yeri · sürükle: ayarla<i style="background:#5fcf80"></i>klip<i style="background:#f06b5b"></i>boşluk'
+    attach: SW('#f97316') + 'nesne' + SW('#38bdf8') + 'hedef',
+    snap: SW('#f97316') + 'nesne' + SW('#38bdf8') + 'hedef',
+    stabilize: SW('#f97316') + 'nesne' + SW('#38bdf8') + 'hedefin yeni konumu',
+    follow: SW('#f97316') + 'nesne' + SW('#38bdf8') + 'nesnenin kadrajdaki yeri' + SW('#5fcf80') + 'klip' + SW('#f06b5b') + 'boşluk'
   };
+  var HINT = {
+    attach: 'Mavi artıyı sürükle: hedef, nesneden ne kadar uzakta duracak.',
+    snap: 'Mavi artıyı sürükle: hedef, nesneden ne kadar uzakta duracak.',
+    stabilize: 'Bu modda önizleme yalnız sonucu gösterir; sürükleme yok.',
+    follow: 'Mavi artıyı sürükle: nesne kadrajın neresinde dursun (ortası 50 / 50).'
+  };
+  function hintValues(o) {
+    var v = function (id) { return $(id) ? Number($(id).value) || 0 : 0; };
+    if (o.mode === 'follow') return 'Yatay ' + v('pinX') + '% · Dikey ' + v('pinY') + '%';
+    if (o.mode === 'attach' || o.mode === 'snap') return 'X ' + v('offX') + ' · Y ' + v('offY') + ' px';
+    return '';
+  }
 
   function prepare() {
     var T = window.MT, hadData = !!data;
@@ -29,6 +42,8 @@
     cv.style.cursor = r.o.mode === 'stabilize' ? 'default' : 'crosshair';
     $('pvLegend').innerHTML = LEG[r.o.mode] || '';
     $('pvLegend').title = $('pvLegend').textContent;
+    $('pvHintTx').textContent = HINT[r.o.mode] || '';
+    var hv = hintValues(r.o); $('pvVal').textContent = hv ? '(' + hv.replace('Yatay', window.T('Yatay')).replace('Dikey', window.T('Dikey')) + ')' : '';
   }
 
   // tuvali ekrandaki boyuta esitle; sekans oranini koruyarak cerceveyi yerlestir
@@ -70,6 +85,13 @@
       g.strokeStyle = col; g.lineWidth = 1.8; g.beginPath();
       g.moveTo(X(p[0]) - s, Y(p[1])); g.lineTo(X(p[0]) + s, Y(p[1])); g.moveTo(X(p[0]), Y(p[1]) - s); g.lineTo(X(p[0]), Y(p[1]) + s); g.stroke();
     }
+    // surukleme tutamagi: halka + artı + kucuk etiket (sadece surukleyerek ayarlanan modlarda)
+    function handle(p) {
+      var x = X(p[0]), y = Y(p[1]);
+      g.fillStyle = 'rgba(56,189,248,.16)'; g.strokeStyle = '#38bdf8'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 11, 0, 6.2832); g.fill(); g.stroke();
+      cross(p, '#38bdf8', 7);
+      g.fillStyle = 'rgba(56,189,248,.9)'; g.font = '600 10px sans-serif'; g.fillText(T('sürükle'), x + 14, y - 8);
+    }
     var gap = false;
     if (o.mode === 'follow') {
       poly(d.S, '#666', 1.2);                                              // nesnenin kadrajdaki izi
@@ -77,7 +99,7 @@
       gap = left > 1e-4 || top > 1e-4 || left + wi < 1 - 1e-4 || top + hi < 1 - 1e-4;
       g.save(); g.setLineDash([6, 4]); g.strokeStyle = gap ? '#f06b5b' : '#5fcf80'; g.lineWidth = 1.5;
       g.strokeRect(X(left), Y(top), wi * L.fw, hi * L.fh); g.restore();
-      cross(o.pin, '#38bdf8', 7);
+      handle(o.pin);
       dot(d.S[i], '#f97316', 4);
     } else {
       var outXY = d.out.map(function (p) { return [p.x, p.y]; });
@@ -86,7 +108,7 @@
       dot(d.Q[0], '#22c55e', 3); dot(d.Q[n - 1], '#ef4444', 3);
       g.save(); g.setLineDash([3, 3]); g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 1;
       g.beginPath(); g.moveTo(X(d.Q[i][0]), Y(d.Q[i][1])); g.lineTo(X(outXY[i][0]), Y(outXY[i][1])); g.stroke(); g.restore();
-      cross(outXY[i], '#38bdf8', 7);
+      if (o.mode !== 'stabilize') handle(outXY[i]); else cross(outXY[i], '#38bdf8', 7);
       dot(d.Q[i], '#f97316', 4);
     }
     if (gap) { g.fillStyle = '#f06b5b'; g.font = '600 11px sans-serif'; g.fillText(T('Kenarda boşluk var'), 6, 14); }
@@ -115,6 +137,7 @@
   }
   cv.addEventListener('mousedown', function (e) { if (!data || !L || e.button !== 0 || spaceDown) return; stop(); drag = true; applyDrag(pos(e)); e.preventDefault(); });
   window.addEventListener('mousemove', function (e) { if (drag && data && L) applyDrag(pos(e)); });
+  cv.addEventListener('mousemove', function (e) { if (drag || pan || spaceDown || !data || !L || data.o.mode === 'stabilize') return; cv.style.cursor = 'crosshair'; });
   window.addEventListener('mouseup', function () { if (drag) { drag = false; if (window.MT) { window.MT.save(); window.MT.touch(); } } });
 
   // ---- sifirla: onizlemede surukleyerek yapilan ayari varsayilana dondur ----
@@ -189,7 +212,7 @@
   $('pvGrip').addEventListener('dblclick', function () { setH(box.classList.contains('min') ? DEF_H : 0, true); });
 
   // ---- ayar degisince canli guncelle ----
-  each(document.querySelectorAll('#pSet input, #pSet select'), function (el) { el.addEventListener('input', sched); el.addEventListener('change', sched); });
+  each(document.querySelectorAll('#pSet input, #pSet select, #pTrack .card:not(#card1) input, #pTrack .card:not(#card1) select'), function (el) { el.addEventListener('input', sched); el.addEventListener('change', sched); });
   $('mode').addEventListener('change', sched);
   window.addEventListener('resize', function () { if (pvh > maxH()) setH(maxH(), false); else render(); });
 

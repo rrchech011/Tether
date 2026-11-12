@@ -1,4 +1,4 @@
-TETHER  v2.16.0
+TETHER  v2.16.1
 ==============
 Premiere Pro paneli: videodaki bir nesneyi (yuz, kafa, top...) kare kare izler ve
 hedef klibin Position / Scale / Rotation animasyonuna cevirir (After Effects tarzi takip).
@@ -10,6 +10,7 @@ ENGLISH (short)
   Use: select the clip, go to the frame where the object is visible, press "Grab frame", draw a box over the object, press "Track".
   Then select the target clip(s), press "Get selected clips", pick a mode and press "Apply".
   Language: Settings > General > "Dil / Language" (Turkish / English). New installs follow the system language.
+  What's new in v2.16.1: "Automatic" method switches to "Cursor / small object" by itself for tiny objects (mouse cursor) when point tracking can't hold on; camera follow now works in vertical 9:16 sequences (zoom limit rises automatically, no black bars); shorter, plainer names in the panel; simpler Reframe zoom card; clearer preview (draggable blue cross with live values); usage hints for Stabilize and tracking model; drag number fields left/right like Premiere (or click and type); "Back to previous tracking" button after re-tracking.
   What's new in v2.16.0: English interface; tracking continues after a scene cut when you re-track from there (small objects too);
   "Apply to" (Motion / Transform) moved into the Mode card; clearer hints (why "Track" is disabled); confirmation before "Reset animation";
   "Copy log" button; ffmpeg download progress bar in kur.bat; the old Object Mask / Premiere mask code was removed (the own tracking engine is the only source now).
@@ -28,6 +29,16 @@ KULLANIM (Takip sekmesi)
   Onizleme ustte: ayar degistikce canli guncellenir; kare kaydirici, oynat, ve onizlemede
   surukleyerek hedef konumu / kadraj konumu ayarlanir. Alttaki tutacla boyutu degistir
   (cift tikla: kucult/buyut).
+
+v2.16.1:
+  - IMLEC / KUCUK NESNE: "Otomatik" yontem, nesne cok kucukse (fare imleci gibi) ve nokta takibi tutunamazsa kendiliginden "Imlec / kucuk nesne" yontemine gecer. (Testte eski davranis imleci kaybedip %100 izlenmis gibi gosteriyordu.) Cok kucuk nesnede elle "Sablon" secilirse uyari verir.
+  - DIKEY 9:16 KAMERA TAKIBI: "En cok zoom" siniri, dizinin en/boy oranina gore otomatik yukselir; yatay kaynak dikey dizide siyah bant birakmaz (eskiden hazir ayarda %220'de kalip bant cikiyordu). Klipte "Scale to Frame Size" aciksa Gelismis'te "Kareye sigdirilmis"i isaretlemek yine gerekir.
+  - ARAYUZ: kisa, duz isimler (Sadece konum, Konum + boyut, Kamera takibi, Titreme giderme ...). Kadraj takibi karti sadelesti (zoom turu, nesnenin kadrajdaki yeri one alindi; zoom siniri ve olu bolge katlanir kutuda). "Boyut ve donme" ve "Nesneden uzaklik" kartlari duzenlendi.
+  - ONIZLEME: surukleme noktasi halka + "surukle" etiketiyle gorunur; altta moda gore ne yaptigini soyleyen cumle ve anlik deger (Yatay/Dikey % ya da X/Y px); "Ortala / sifirla".
+  - SAYI KUTULARI: Premiere gibi saga / sola surukleyerek degistir (Shift = hizli) ya da tiklayip elle yaz. Surukleme sirasinda onizleme canli guncellenir, Premiere'e yazma birakinca bir kez yapilir. Takip sekmesindeki kutular da artik onizlemeyi guncelliyor.
+  - ONCEKI TAKIBE DON: "Takip et"e tekrar basinca onceki sonuc saklanir; "Onceki takibe don" / "Yeni takibe don" ikisi arasinda gecis yapar (yalniz tam takip; "Buradan ileri/geri" kismi duzeltmeleri kapsamaz).
+  - IPUCLARI: Sabitle nasil kullanilir (sabit nokta sec, yalniz kaymayi duzeltir), kadraj takibinde kenar siniri, takip modeli secimi.
+  - track.js, parser.js ve host.jsx DEGISMEDI.
 
 v2.16.0:
   - INGILIZCE DESTEK: Ayarlar > Genel > "Dil / Language". Eski kullanicida Turkce kalir; yeni kurulum sistem diline uyar. Arayuz, gunluk, uyarilar ve guncelleyici mesajlari cevrildi.

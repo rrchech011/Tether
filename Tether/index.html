@@ -5,7 +5,7 @@
 <div id="updBar" class="hidden"><span id="updBarTxt"></span><span id="updBarPct"></span><button id="updBarBtn" class="hidden"></button><i id="updBarFill"></i></div>
 
 <header>
- <h1 title="Klibi takip edilen nesneye bağlar">Tether<span>v2.16.0</span></h1>
+ <h1 title="Klibi takip edilen nesneye bağlar">Tether<span>v2.16.1</span></h1>
  <nav class="tabs">
   <button class="tab on" data-page="pTrack">Takip</button>
   <button class="tab" data-page="pSet">Ayarlar</button>
@@ -18,8 +18,9 @@
  <div id="pvBar"><span id="pvTitle">Önizleme (takip bitince görünür)</span><label class="sw" id="liveSw" title="Açıkken, önizlemede bir şeyi değiştirip bıraktığında sonuç otomatik olarak Premiere'e yazılır. Yanlış olursa Geri al."><span>Canlı uygula</span><input id="live" type="checkbox"></label><span id="pvTime"></span></div>
  <div id="pvBody">
   <div id="pvWrap"><canvas id="cv"></canvas><div id="pvZoom"><button class="mini" id="pvZout" title="Uzaklaştır (fare tekerleği de çalışır)">−</button><button class="mini wide" id="pvZfit" title="Sığdır (%100). Kaydırma: orta / sağ tuş ya da Boşluk + sürükle">100%</button><button class="mini" id="pvZin" title="Yakınlaştır (fare tekerleği de çalışır)">+</button></div></div>
-  <div id="pvCtl"><button class="mini" id="pvPlay" title="Oynat / durdur">▶</button><input id="pvScrub" type="range" min="0" max="0" value="0"><button class="mini wide" id="pvReset" title="Önizlemede sürükleyerek yaptığın ayarı (uzaklık / kadraj noktası) sıfırla. Önizlemeye çift tıklamak da aynı işi yapar.">↺ Konumu sıfırla</button></div>
+  <div id="pvCtl"><button class="mini" id="pvPlay" title="Oynat / durdur">▶</button><input id="pvScrub" type="range" min="0" max="0" value="0"><button class="mini wide" id="pvReset" title="Önizlemede sürükleyerek yaptığın ayarı (uzaklık / kadraj noktası) sıfırla. Önizlemeye çift tıklamak da aynı işi yapar.">↺ Ortala / sıfırla</button></div>
   <div id="pvLegend"></div>
+  <div id="pvHint"><span id="pvHintTx"></span> <b id="pvVal"></b></div>
  </div>
  <div id="pvGrip" title="Sürükle: önizleme boyutu · çift tıkla: küçült / büyüt"><i></i></div>
 </section>
@@ -47,9 +48,9 @@
      <div class="row"><button id="bOwnBwd" class="fixb">← Buradan geri takip</button><button id="bOwnFwd" class="fixb">Buradan ileri takip →</button></div>
      <div class="hint" style="margin:5px 0 0">Yanlış kareye gel, kutuyu nesneye çek, yukarıdaki düğmelerden birine bas.</div>
    </div>
-   <div class="field" style="margin-top:10px"><label for="ownModel">Takip modeli</label><select id="ownModel"><option value="trans" selected>Yalnız konum (kafa / yüz)</option><option value="scale">Konum + ölçek</option><option value="sim">Konum + ölçek + dönme</option></select></div>
+   <div class="field" style="margin-top:10px"><label for="ownModel">Takip modeli</label><select id="ownModel"><option value="trans" selected>Sadece konum</option><option value="scale">Konum + boyut</option><option value="sim">Konum + boyut + dönme</option></select><small>Nesne yaklaşıp uzaklaşıyorsa "Konum + boyut", dönüyorsa "+ dönme" seç; yanlış model konumu bozar.</small></div>
    <details class="adv inner" id="tuneBox"><summary>Takip ayarları <small>yöntem, arama, yön, çözünürlük</small></summary>
-    <div class="row"><div class="field"><label for="ownMethod">Yöntem</label><select id="ownMethod"><option value="auto" selected>Otomatik</option><option value="pts">Nokta (yüz, dokulu)</option><option value="tpl">Şablon (düz, hızlı nesne)</option><option value="small">İmleç / küçük nesne (ekran kaydı)</option></select></div>
+    <div class="row"><div class="field"><label for="ownMethod">Yöntem</label><select id="ownMethod"><option value="auto" selected>Otomatik</option><option value="pts">Nokta</option><option value="tpl">Şablon</option><option value="small">İmleç / küçük nesne</option></select></div>
     <div class="field"><label for="ownAdapt">Görünümü uyarla</label><select id="ownAdapt"><option value="1" selected>Açık</option><option value="0">Kapalı</option></select></div></div>
     <div class="row"><div class="field"><label for="ownSearch">Arama bölgesi</label><select id="ownSearch"><option value="0.6">Dar</option><option value="1" selected>Normal</option><option value="1.8">Geniş</option></select></div>
     <div class="field"><label for="ownDir">Yön</label><select id="ownDir"><option value="both">İki yön</option><option value="fwd">Yalnız ileri</option><option value="bwd">Yalnız geri</option></select></div></div>
@@ -57,6 +58,7 @@
    </details>
    <p class="hint" id="runWhy" style="margin:10px 0 0">Takip et için önce <b>Kare al</b>'a bas ve nesnenin üstüne dikdörtgen çiz.</p>
    <button id="bOwnRun" class="primary run" disabled style="margin-top:8px">Takip et</button>
+   <button id="bOwnRestore" class="warnb hidden" title="Takip et'e basmadan önceki takip sonucunu geri getirir. Tekrar basınca yeni sonuca döner.">↶ Önceki takibe dön</button>
   </div>
   </div>
   </div>
@@ -74,8 +76,8 @@
 
   <div class="card stepc stepend">
    <div class="steprow" style="margin-bottom:8px"><i class="num"><span id="n3">3</span></i><b class="stitle">Mod</b></div>
-      <div class="field" style="margin:0 0 10px"><label for="preset">Ne yapmak istiyorsun? (hazır ayar)</label>
-    <select id="preset"><option value="">Özel (elle ayarlı)</option><option value="tag">Oyun: isim / etiket (nesnenin üstünde)</option><option value="lock">Oyun: nişan / işaret (nesneye kilit)</option><option value="cam">Oyun: yumuşak kamera takibi (kill-cam)</option><option value="text">Yazı / grafik: bulunduğu yerde takip et</option><option value="stab">Titrek görüntüyü sabitle</option></select>
+      <div class="field" style="margin:0 0 10px"><label for="preset">Hazır ayar</label>
+    <select id="preset"><option value="">Özel</option><option value="tag">İsim / etiket</option><option value="lock">Nişan / işaret</option><option value="cam">Kamera takibi (kadrajda tut)</option><option value="text">Yazı / grafik</option><option value="stab">Titreme giderme</option></select>
     <small>Seçince mod ve ayarlar kendiliğinden düzenlenir; sonra istediğini değiştirebilirsin.</small></div>
    <div class="seg" id="seg">
     <button data-mode="attach">Takip et</button>
@@ -90,7 +92,7 @@
    <p class="hint" id="modeDesc"></p>
    <div class="field" id="smoothRow" style="margin:10px 0 0"><label for="smooth">Yumuşatma <span class="out" id="smoothOut">0</span></label>
     <input id="smooth" type="range" min="0" max="30" value="0"><small>0 = kapalı. Titremeyi azaltır; 3-6 çoğu çekimde yeterli.</small></div>
-   <div class="field" id="applyRow" style="margin:10px 0 0"><label for="applyTo">Nereye uygulansın?</label><select id="applyTo"><option value="motion">Motion (normal)</option><option value="xform">Transform efekti (hareket bulanıklığı için)</option></select></div>
+   <div class="field" id="applyRow" style="margin:10px 0 0"><label for="applyTo">Nereye uygulansın?</label><select id="applyTo"><option value="motion">Motion (normal)</option><option value="xform">Transform (hareket bulanıklığı)</option></select></div>
    <div class="field hidden" id="shutRow" style="margin:8px 0 0"><input id="shutterAng" type="number" value="180" min="0" max="360"><small>Shutter Angle (°) — 0 = bulanıklığa dokunma</small></div>
    <p class="hint hidden" id="xfHint" style="margin-top:6px">Transform'da hareket bulanıklığı (Shutter Angle) kullanılır. Klipte efekt yoksa Tether eklemeyi dener; olmazsa Effects &gt; Video Effects &gt; Distort &gt; Transform'u elle sürükle.</p>
   </div>
@@ -98,15 +100,18 @@
 
   <div class="card" data-modes="follow">
    <h2>Kadraj takibi</h2>
-   <div class="field"><label for="zoomMode">Zoom / Scale</label><select id="zoomMode"><option value="auto">Otomatik: Scale + Position</option><option value="fixed">Sabit zoom (tek Scale değeri)</option><option value="keep">Yalnız Position (Scale'e dokunma)</option></select><small id="zoomModeHint"></small></div>
-   <label class="sw sz" id="sizeRow"><span>Nesne boyutunu takip et<small>Nesne küçülünce (uzaklaşınca) zoom artar, büyüyünce azalır; Scale sürekli keyframelenir.</small></span><input id="sizeTrack" type="checkbox" checked></label>
+   <div class="field"><label for="zoomMode">Zoom</label><select id="zoomMode"><option value="auto">Otomatik zoom</option><option value="fixed">Sabit zoom</option><option value="keep">Sadece kaydır (zoom yok)</option></select><small id="zoomModeHint"></small></div>
+   <div class="field" id="zoomHide"><label for="zoom"><span id="zoomLbl">Zoom (%)</span></label><input id="zoom" type="number" value="150" min="100" max="1000"></div>
+   <label class="sw" id="autoZoomRow"><span>Boşluksuz en küçük zoomu bul<small>Kenarda boşluk bırakmayan en düşük zoomu kendisi hesaplar.</small></span><input id="autoZoom" type="checkbox"></label>
+   <label class="sw sz" id="sizeRow"><span>Nesne boyutunu takip et<small>Nesne uzaklaşınca zoom artar, yaklaşınca azalır.</small></span><input id="sizeTrack" type="checkbox" checked></label>
    <div class="field sz" id="sizeStrRow"><label for="sizeStr">Boyut takibi gücü (%)</label><input id="sizeStr" type="number" value="70" min="0" max="150"><small>100 = nesne hep ilk karedeki boyutta kalır. Düşük değer daha hafif zoom yapar.</small></div>
-   <div class="field" id="zoomHide"><label for="zoom"><span id="zoomLbl">Yakınlaştırma (Scale %)</span></label><input id="zoom" type="number" value="150" min="100" max="1000"></div>
-   <div class="field" id="zoomMaxRow"><label for="zoomMax">En çok zoom (%)</label><input id="zoomMax" type="number" value="300" min="100" max="1000"><small>Zoom bu değeri aşmaz (görüntü bozulmasın). Sınıra dayanırsan Scale o noktada sabit kalır; sınırı artır ya da gücü düşür.</small></div>
-   <label class="sw" id="autoZoomRow"><span>Otomatik zoom<small>Tek sabit zoom: kenarda boşluk bırakmayan en küçük değeri bulur.</small></span><input id="autoZoom" type="checkbox"></label>
-   <div class="field"><label for="dz">Ölü bölge (%)</label><input id="dz" type="number" value="0" min="0" max="40"><small>Nesne bu bölgeden çıkana kadar kamera sabit kalır.</small></div>
    <div class="lbl">Nesnenin kadrajdaki yeri</div>
    <div class="row"><div class="field"><input id="pinX" type="number" value="50" min="0" max="100" title="X % (0 sol, 100 sağ)"><small>Yatay %</small></div><div class="field"><input id="pinY" type="number" value="50" min="0" max="100" title="Y % (0 üst, 100 alt)"><small>Dikey %</small></div></div>
+   <p class="hint" style="margin:0 0 4px">50 / 50 = nesne tam ortada. Önizlemede mavi artıyı sürükleyerek de ayarlayabilirsin.</p>
+   <details class="adv inner"><summary>Zoom sınırı ve ölü bölge</summary>
+    <div class="field" id="zoomMaxRow" style="margin-top:8px"><label for="zoomMax">En çok zoom (%)</label><input id="zoomMax" type="number" value="300" min="100" max="1000"><small>Zoom bu değeri aşmaz. Dikey (9:16) dizide boşluksuz kadraj için gerekirse kendiliğinden yükselir.</small></div>
+    <div class="field"><label for="dz">Ölü bölge (%)</label><input id="dz" type="number" value="0" min="0" max="40"><small>Nesne bu bölgede kaldıkça kamera durur.</small></div>
+   </details>
   </div>
 
   <div class="card" data-modes="snap">
@@ -116,18 +121,18 @@
    <p class="hint" style="margin-top:4px">Nesne yaklaşıp uzaklaşınca etiket kutu kenarında kalır. Takip kutusunun kenarına göre yerleşir.</p>
   </div>
 
-  <div class="card sz" data-modes="attach snap">
-   <h2>Boyut takibi</h2>
-   <label class="sw"><span>Hedef boyutu nesneyle değişsin<small>Nesne yaklaşınca / uzaklaşınca hedefin Scale'i de değişir.</small></span><input id="scTrack" type="checkbox"></label>
-   <label class="sw" style="margin-top:8px"><span>Hedef nesneyle dönsün<small>Yalnız Kendi takibim verisinde (nesne dönüyorsa).</small></span><input id="rotTrack" type="checkbox"></label>
-   <div class="field" style="margin-top:8px"><input id="scStr" type="number" value="100" min="0" max="200"><small>Etki (%) — 100 = nesneyle birebir</small></div>
+  <div class="card" data-modes="attach snap">
+   <h2>Nesneden uzaklık</h2>
+   <div class="row"><div class="field"><input id="offX" type="number" value="0"><small>X (px)</small></div><div class="field"><input id="offY" type="number" value="0"><small>Y (px)</small></div></div>
+   <p class="hint" style="margin:0">Önizlemede mavi artıyı sürükleyerek de ayarlayabilirsin.</p>
+   <label class="sw" style="margin-top:10px"><span>Yazıyı nesnenin tam üstüne oturt<small>Yazı / grafik klibinde yazının kendi konumunu hesaba katar (yalnız "Üstüne taşı").</small></span><input id="txtComp" type="checkbox" checked></label>
   </div>
 
-  <div class="card" data-modes="attach snap">
-   <h2>Konum</h2>
-   <div class="lbl">Nesneden uzaklık (px)</div>
-   <div class="row"><div class="field"><input id="offX" type="number" value="0"><small>X</small></div><div class="field"><input id="offY" type="number" value="0"><small>Y</small></div></div>
-   <label class="sw" style="margin-top:10px"><span>Yazıyı nesnenin tam üstüne oturt<small>Yazı / grafik klibinde yazının kendi konumunu hesaba katar (yalnız "Üstüne taşı").</small></span><input id="txtComp" type="checkbox" checked></label>
+  <div class="card sz" data-modes="attach snap">
+   <h2>Boyut ve dönme</h2>
+   <label class="sw"><span>Hedef boyutu nesneyle değişsin<small>Nesne yaklaşınca / uzaklaşınca hedefin Scale'i de değişir.</small></span><input id="scTrack" type="checkbox"></label>
+   <label class="sw" style="margin-top:8px"><span>Hedef nesneyle dönsün<small>Takip modeli "Konum + boyut + dönme" olmalı.</small></span><input id="rotTrack" type="checkbox"></label>
+   <div class="field" style="margin-top:8px"><input id="scStr" type="number" value="100" min="0" max="200"><small>Etki (%) — 100 = nesneyle birebir</small></div>
   </div>
  </section>
 

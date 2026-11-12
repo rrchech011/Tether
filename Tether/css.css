@@ -107,7 +107,8 @@ input[type=range]{width:100%;margin:2px 0;accent-color:var(--vio)}
 button.mini{width:27px;padding:2px 0;line-height:1.2}
 button.mini.wide{width:auto;padding:2px 8px;white-space:nowrap;flex:none}
 #liveSw.sw{margin:0;gap:7px;flex:none;color:var(--mu)}#liveSw.sw span{flex:none}
-#pvLegend{margin:5px 0 1px;color:var(--mu);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pvLegend{margin:5px 0 1px;color:var(--mu);font-size:11px;line-height:1.5}
+#pvHint{margin:2px 0 3px;color:var(--tx);font-size:11px;line-height:1.4}#pvHint b{color:#38bdf8;font-weight:600;white-space:nowrap}
 #pvLegend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin:0 4px 0 8px;vertical-align:-1px}#pvLegend i:first-child{margin-left:0}
 #pvGrip{height:13px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;margin:0 -14px}
 #pvGrip i{width:34px;height:3px;border-radius:2px;background:#463e5e}#pvGrip:hover i{background:var(--vio)}
@@ -190,3 +191,7 @@ details.adv.inner .row{margin-top:9px}
 #paneOwn>.hint:first-child{margin-bottom:10px}
 .logbar{display:flex;justify-content:flex-end;gap:16px;margin:8px 0 0}
 #runWhy.hidden{display:none}
+
+input[type=number]{cursor:ew-resize}input[type=number]:focus{cursor:text}
+body.scrubbing,body.scrubbing *{cursor:ew-resize!important;user-select:none!important}
+#bOwnRestore{margin-top:6px;width:100%}

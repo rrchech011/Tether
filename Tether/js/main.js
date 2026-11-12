@@ -110,7 +110,7 @@
   }
 
   /* ===================== v1.9: analiz durumu, asamalar, hatalar, diagnostics ===================== */
-  var PLUGIN_VERSION = '2.16.0';
+  var PLUGIN_VERSION = '2.16.1';
   var TPS_ = (window.MaskParser && MaskParser.TPS) || 254016000000;
 
   function qualityCell(track) {
@@ -253,7 +253,7 @@
       if (!r) return;
       $('bOwnRun').disabled = false; setRunWhy(false);
       var srcMax = Math.max(r[2] * (own.imgW || 1), r[3] * (own.imgH || 1));
-      if ($('ownMethod').value === 'auto' && own.imgW && srcMax < 0.07 * own.imgW) ownMsg('Bölge hazır. Nesne küçük görünüyor (~' + Math.round(srcMax) + ' px). Ekran kaydında fare imleci gibi küçük bir şeyse "Yöntem" listesinden "İmleç / küçük nesne"yi seç; sonra "Takip et".', 'ok');
+      if ($('ownMethod').value === 'auto' && own.imgW && srcMax < 0.07 * own.imgW) ownMsg('Bölge hazır. Nesne küçük görünüyor (~' + Math.round(srcMax) + ' px). Fare imleci gibi küçük bir şeyse "Otomatik" yöntem gerekirse "İmleç / küçük nesne"ye kendisi geçer; sonra "Takip et".', 'ok');
       else ownMsg('Bölge hazır. Kutuyu tutup taşıyabilir, kenar/köşelerinden boyutlandırabilirsin; sonra "Takip et".', 'ok');
     });
   })();
@@ -275,7 +275,7 @@
         if (err) return ownMsg('HATA: ' + err, 'err');
         var img = new Image();
         img.onload = function () {
-          own.img = img; own.imgW = img.width; own.imgH = img.height; own.bg = null; own.res = null; own.frames = null; own.verify = null; own.pair = null; $('ownReview').classList.add('hidden');
+          own.img = img; own.imgW = img.width; own.imgH = img.height; own.bg = null; own.res = null; own.frames = null; own.verify = null; own.pair = null; $('ownReview').classList.add('hidden'); own.prevRun = null; ownRestoreUI();
           $('ownBox').classList.remove('hidden'); ownZ.z = 1; ownZoomApply();
           ownMsg('Nesnenin üstüne fareyle dikdörtgen çiz (köşeleri/dokuyu içersin). Çizdikten sonra kutuyu taşıyıp boyutlandırabilirsin.');
         };
@@ -334,6 +334,24 @@
       showScrub(Number($('ownScrub').value) || 0);
     } catch (e) { ownMsg('HATA: ' + e, 'err'); } finally { ownBusyUI(false); }
   });
+  // v2.16.1: "Önceki takibe dön". Tam takip tekrar çalıştırılınca önceki sonuç saklanır; düğme ikisi arasında geçiş yapar.
+  function ownSnap() { return { res: own.res, frames: own.frames, W: own.W, H: own.H, fps: own.fps, nativeFps: own.nativeFps, rect: own.rect ? own.rect.slice() : null, method: own.method, crop: own.crop, cutsIdx: own.cutsIdx, scrub: own.scrub, verRef: own.verRef }; }
+  function ownRestoreUI() {
+    var b = $('bOwnRestore'); if (!b) return;
+    var p = own.prevRun, show = !!(p && p.res && p.res !== own.res);
+    b.classList.toggle('hidden', !show);
+    if (show) b.textContent = own.prevShown ? '↷ Yeni takibe dön' : '↶ Önceki takibe dön';
+  }
+  $('bOwnRestore') && ($('bOwnRestore').onclick = async function () {
+    var p = own.prevRun; if (!p || !p.res || own.running) return; ownBusyUI(true);
+    try {
+      var cur = ownSnap(); own.prevShown = !own.prevShown;
+      own.res = p.res; own.frames = p.frames; own.W = p.W; own.H = p.H; own.fps = p.fps; own.nativeFps = p.nativeFps; own.rect = p.rect; own.method = p.method; own.crop = p.crop; own.cutsIdx = p.cutsIdx || []; own.verRef = p.verRef; own.pair = null; own.anchors = {};
+      own.prevRun = cur;
+      await ownFinalize(own.res, 0, own.prevShown ? ' (önceki takip geri getirildi)' : ' (yeni takip geri getirildi)');
+      drawOwn(); var sl = $('ownScrub'); sl.max = own.frames.length - 1; sl.value = Math.min(own.frames.length - 1, Math.max(0, p.scrub || 0)); showScrub(Number(sl.value));
+    } catch (e) { ownMsg('HATA: ' + e, 'err'); } finally { ownBusyUI(false); ownRestoreUI(); }
+  });
   function stepScrub(d) { if (!own.frames) return; var sl = $('ownScrub'), i = Math.max(0, Math.min(own.frames.length - 1, Number(sl.value) + d)); sl.value = i; showScrub(i); return i; }
   var playT = null;
   function stopPlay() { if (playT) { clearInterval(playT); playT = null; } $('bOwnPlay').textContent = '▶'; }
@@ -370,7 +388,7 @@
     $('ownScrubInfo').textContent = 'Kare ' + (i + 1) + '/' + own.frames.length + (f ? (f.conf < WEAK ? ' · zayıf (güven %' + Math.round(f.conf * 100) + ')' : ' · izleniyor') : ' · takip yok' + (sugg ? ' · kutu komşu karelerden ÖNERİLDİ, nesneye çekip düzelt' : ''));
   }
   function setRunWhy(on) { var w = $('runWhy'); if (w) w.classList.toggle('hidden', !on); }
-  function ownBusyUI(on) { own.running = on; $('bOwnRun').textContent = on ? 'Durdur' : 'Takip et'; $('bOwnRun').classList.toggle('primary', !on); ['bOwnFrame', 'bOwnFwd', 'bOwnBwd'].forEach(function (id) { $(id).disabled = on; }); $('ownScrub').disabled = on; }
+  function ownBusyUI(on) { own.running = on; $('bOwnRun').textContent = on ? 'Durdur' : 'Takip et'; $('bOwnRun').classList.toggle('primary', !on); ['bOwnFrame', 'bOwnFwd', 'bOwnBwd'].forEach(function (id) { $(id).disabled = on; }); $('ownScrub').disabled = on; if ($('bOwnRestore')) $('bOwnRestore').disabled = on; if (!on) ownRestoreUI(); }
   // Sonucu Tether takip verisine cevir ve durum panelini guncelle
   // v2.14: hedef dogrulama uyari metni. Kare numaralari arayuzdeki gibi 1'den baslar. B DENEYSELDIR; hicbir ifade kesin hedef kaybi iddiasi degildir.
   function ownVerifyText(ver) {
@@ -407,6 +425,7 @@
     log('Kendi takibim: ' + pts.length + ' kare, konum + ölçek + dönme.' + (holes ? ' ' + holes + ' kare boş.' : ''));
     if (vm) log('UYARI: Hedef doğrulama (deneysel): ' + vm);
     var qc = qualityCell(st.tracks[0]); if (qc && qc.level !== 'good') log('UYARI: Takip kalitesi: ' + qc.text);
+    ownRestoreUI();
     return true;
   }
   function ownProg(done, total) { ownMsg('Takip ediliyor… %' + Math.round(100 * done / Math.max(1, total)) + ' (' + done + '/' + total + ' kare)'); }
@@ -428,6 +447,8 @@
   $('bOwnRun').onclick = async function () {
     if (own.running) { own.cancel = true; if (own.sig && own.sig.kill) own.sig.kill(); return; }
     var inf = own.info, ff = ownFf(); if (!inf || !own.rect || !ff) return;
+    own.prevShown = false;
+    if (own.res && own.frames) own.prevRun = ownSnap();   // v2.16.1: yeni takip bu sonucun yerine geçmeden önce saklanır ("Önceki takibe dön")
     own.cancel = false; ownBusyUI(true); own.pair = null; own.cutsIdx = [];
     var t0 = Date.now();
     try {
@@ -447,15 +468,15 @@
       if (own.cancel) { ownMsg('Durduruldu.'); return; }
       own.frames = r.frames; own.W = W; own.H = H; own.fps = fps;
       var refIdx = Math.min(r.frames.length - 1, Math.max(0, Math.round((own.tRef - inf.inSec) * fps)));
-      if ($('ownMethod').value === 'small') {   // imlec / kucuk nesne: baska yontemlere dokunmaz
+      async function runSmallMode() {   // imlec / kucuk nesne: baska yontemlere dokunmaz
         var rsm = await ownSmallRun(inf.inSec, r.frames.length, refIdx, $('ownDir').value);
         if (!rsm) return;
         own.method = 'small'; own.crop = undefined; own.res = rsm; own.scrub = refIdx; own.anchors = {};
         if (await ownFinalize(rsm, t0, (rsm.cancelled ? ' (durduruldu: o ana kadarki kısım)' : '') + ' (imleç / küçük nesne, yerel çözünürlük)')) {
           $('ownReview').classList.remove('hidden'); var sl2 = $('ownScrub'); sl2.max = r.frames.length - 1; sl2.value = refIdx; showScrub(refIdx);
         }
-        return;
       }
+      if ($('ownMethod').value === 'small') { await runSmallMode(); return; }
       var res = await OWN.trackRegionAsync(r.frames, W, H, refIdx, own.rect, { dir: $('ownDir').value, model: $('ownModel').value, adapt: $('ownAdapt').value !== '0', search: 1, searchR: ownSearchR(), searchRy: ownSearchRy(), onProgress: ownProg, cancel: function () { return own.cancel; } });
       // v2.16: sahne kesmesi varsa "sablonla doldurma" yalniz REFERANS SAHNESINDE yapilir (diger sahnelerde nesne yoktur; orada dolgu uydurma konum olurdu). Kesme yoksa sahne = tum klip, davranis AYNEN.
       var cutsE = []; try { OWN.detectCutsStrict(r.frames, W, H).forEach(function (c, ci) { if (c) cutsE.push(ci); }); } catch (e) {}
@@ -464,6 +485,11 @@
       function cntSc(rr) { var c = 0, q; for (q = scB[0]; q <= scB[1]; q++) if (rr.frames[q]) c++; return c; }
       function onlySc(rr) { return (scN === r.frames.length) ? rr : Object.assign({}, rr, { frames: rr.frames.map(function (f, q) { return inSc(q) ? f : null; }) }); }
       var okN = cntSc(res), relaxedNote = '', mth = $('ownMethod').value;
+      // v2.16.1: kucuk nesne (imlec gibi) + nokta takibi neredeyse hic tutunamadiysa sablona dusmek yerine yerel cozunurluklu "imlec / kucuk nesne" yontemi kullanilir (testte sablon imleci kaybedip %100 izlemis gibi gosteriyordu).
+      if (mth === 'auto' && !res.cancelled && !own.cancel && r.frames.length > 12 && own.imgW && own.rect && Math.max(own.rect[2] * own.imgW, own.rect[3] * (own.imgH || own.imgW)) < 0.07 * own.imgW && okN < Math.round(scN * 0.5)) {
+        log('Nesne küçük ve nokta takibi tutunamadı (' + okN + ' / ' + scN + ' kare): "İmleç / küçük nesne" yöntemine geçildi.');
+        await runSmallMode(); return;
+      }
       own.method = ''; own.crop = undefined;
       if (mth === 'tpl' || (mth === 'auto' && !res.cancelled && r.frames.length > 12 && okN < Math.round(scN * 0.95))) {   // nokta takibi zayifsa (dokusuz / hizli nesne) sablon eslestirmeyi dene
         ownMsg('Şablon eşleştirme deneniyor…');
@@ -523,6 +549,7 @@
       }
       try { var sj = OWN.smoothJumps(res, Math.max(6, Math.round(0.5 * own.fps)), 0.25); if (sj.jumps) { res = sj.res; relaxedNote += ' · ' + sj.jumps + ' yerde kutu bir karede çok sıçradı (takip kaynağı değişimi); geçiş yumuşatıldı (sarı kareler)'; log('Takip kaynağı birleşiminde ' + sj.jumps + ' sıçrama yumuşatıldı.'); } } catch (e) {}
       try { var dw = OWN.dropFrozenAfterCuts(res, own.cutsIdx || [], refIdx, own.W); if (dw.dropped) { res = dw.res; relaxedNote += ' · sahne kesmesinden sonra arka plana sabitlenip hiç kımıldamayan ' + dw.dropped + ' kare takipsiz bırakıldı (keyframe yapılmaz)'; log('Sahne kesmesi sonrası sabitlenmiş takip silindi: ' + dw.dropped + ' kare.'); } } catch (e) {}
+      if (own.method === 'tpl' && own.rect && own.imgW && Math.max(own.rect[2] * own.imgW, own.rect[3] * (own.imgH || own.imgW)) < 0.07 * own.imgW) relaxedNote += ' · UYARI: nesne çok küçük; şablon yöntemi nesneyi kaybedip arka plana kayabilir. Önizlemeyi kontrol et; gerekirse "Yöntem" listesinden "İmleç / küçük nesne"yi seç';
       own.res = res; own.scrub = refIdx; own.anchors = {};
       own.verRef = { idx: refIdx, rect: own.rect.slice() };   // v2.14: hedef dogrulama uyarisi icin ILK referans (yeniden takipte kutu degisse bile ilk gorunum kullanilir)
       if (await ownFinalize(res, t0, (res.cancelled ? ' (durduruldu: o ana kadarki kısım)' : '') + relaxedNote)) {
@@ -684,7 +711,7 @@
       mode: $('mode').value, tgtPos: tgt.pos,
       step: Math.max(1, num('step', 1)), smooth: Math.max(0, num('smooth', 0)), tol: Math.max(0, num('tol', 0)),
       zoom: ($('zoomMode').value === 'keep' && st.src) ? (Number(st.src.scale) || 100) : (num('zoom', 150) || 150),
-      zoomMax: num('zoomMax', 300) || 300, dynZoom: $('zoomMode').value === 'auto', sizeTrack: !posOnly() && $('sizeTrack').checked, sizeStr: Math.max(0, num('sizeStr', 70)),
+      zoomMax: Math.max(num('zoomMax', 300) || 300, Math.ceil(Math.max(tgt.seqW / ss[0], tgt.seqH / ss[1]) * 100 * 1.1)), dynZoom: $('zoomMode').value === 'auto', sizeTrack: !posOnly() && $('sizeTrack').checked, sizeStr: Math.max(0, num('sizeStr', 70)),
       despike: $('despike').checked ? 0.05 : 0, deadzone: Math.max(0, num('dz', 0)) / 100,
       offset: [num('offX', 0), num('offY', 0)], pin: [pct('pinX'), pct('pinY')], stats: {}, vis: visOffset(tgt), rotTrack: !posOnly() && !!($('rotTrack') && $('rotTrack').checked), rotStr: 100, tgtRot: Number(tgt.xf && where_for_opts() === 'xform' ? tgt.xf.rot : tgt.rot) || 0, scaleTrack: !posOnly() && !!($('scTrack') && $('scTrack').checked), scaleStr: Math.max(0, num('scStr', 100)), tgtScale: Number(tgt.scale) || 100, place: ($('plc') ? $('plc').value : 'center'), gap: num('plcGap', 24)
     };
@@ -830,6 +857,8 @@
     if (!live && !follow && r.o.scaleTrack && r.stats.sizeMissing) log('UYARI: Bu takip verisinde boyut bilgisi yok; Scale takibi yapılmadı (yalnız konum).');
     if (!live && !follow && sct && tgt.uniform === false) log('UYARI: Hedefte Uniform Scale kapalı; Scale yalnız yüksekliği değiştirir. Hedefte Motion > Uniform Scale\'i aç.');
     if (follow && r.stats.clamped && r.stats.clamped >= Math.max(6, 0.05 * list.length)) log('UYARI: Nesne kenara yakın olduğu için ' + r.stats.clamped + ' / ' + list.length + ' karede kadraj kenar sınırına dayandı: nesne pin noktasına getirilemedi, kadraj yerinde duruyor / yalnız dikey oynuyor gibi görünür (takip verisi doğru olsa bile). Çözüm: "Nesne X / Y" konumunu nesnenin bulunduğu kenara kaydır ya da "En çok zoom"u artır.');
+    if (!live && follow && !$('fit').checked && Number(st.src.scale) === 100 && (r.seqH > r.seqW) !== (ssz[1] > ssz[0]) && Math.abs(ssz[0] / ssz[1] - r.seqW / r.seqH) > 0.02)
+      log('İpucu (dikey / yatay uyumsuzluğu): Dizi ' + r.seqW + '×' + r.seqH + ', kaynak ' + Math.round(ssz[0]) + '×' + Math.round(ssz[1]) + '. Klipte "Scale to Frame Size" açıksa Gelişmiş > "Kareye sığdırılmış"ı işaretle, yoksa kadraj kayar ya da kenarda boşluk kalır. Kadraj takibinde "Otomatik zoom" boşluk bırakmayacak en küçük zoomu bulur.');
     var jumps = jumpCount(r);
     if (jumps) log('UYARI: ' + jumps + ' yerde ani sıçrama var (takip kopmuş olabilir). Yumuşatma artırmayı ya da nesneyi yeniden takip ettirmeyi dene.');
     var zoom = ((follow && !dyn && !keep) ? r.zoom : 0) * (xfc ? 100 / xfc.m : 1);   // keep: Scale'e dokunma
@@ -838,7 +867,7 @@
       var ss2 = effectiveSrcSize();
       if (ss2[0] * r.zoom / 100 / r.seqW <= 1 || ss2[1] * r.zoom / 100 / r.seqH <= 1)
         log('UYARI: Bu yakınlaştırmada klip kadrajı tam dolduramıyor, kenarlarda boşluk kalır. Yakınlaştırmayı artır, otomatik zoom\'u ya da dinamik zoom\'u aç.');
-      if (!keep) vlog('İpucu: Nesne kenara yaklaşınca sabit zoom kamerayı durdurur (nesneye yetişemez). "Otomatik: Scale + Position" bunu çözer.');
+      if (!keep) vlog('İpucu: Nesne kenara yaklaşınca sabit zoom kamerayı durdurur (nesneye yetişemez). "Otomatik zoom" bunu çözer.');
     }
     if (dyn && r.zlist && r.zlist.length) {
       var zmax = 0; r.zlist.forEach(function (p) { if (p.z > zmax) zmax = p.z; });
@@ -1058,7 +1087,7 @@
   };
   $('mode').addEventListener('change', updateReady);
   updateReady(); renderDiag();
-  window.MT = { st: st, compute: compute, previewTarget: previewTarget, save: saveSettings, touch: touch };
+  window.MT = { own: own, st: st, compute: compute, previewTarget: previewTarget, save: saveSettings, touch: touch };
   // ===== v2.16 (TEST): guncelleyici arayuzu. Hatalar paneli bozmaz. Otomatik kurulum acikken Premiere kapatilmaz: kurulumdan sonra panel kendini yeniler (calisma varsa kullanici onayi beklenir). =====
   (function () {
     var U = window.TetherUpdater, upd = null, last = null, busy = false;

@@ -21,8 +21,8 @@
   var DESC = {
     attach: 'Hedef klip bulunduğu yerde kalır, nesnenin hareketini izler.',
     snap: 'Hedef klibi nesnenin üstüne yerleştirir ve izletir.',
-    stabilize: 'Nesne sabit kalsın diye hareketi tersine uygular. Hedef olarak aynı klibi seç.',
-    follow: 'Klibi yakınlaştırır, nesneyi kadrajda tutar. Hedef klip gerekmez, aynı klip kullanılır.'
+    stabilize: 'Seçtiğin nokta hep aynı yerde kalır (örn. duran bir bina köşesi; hareketli nesneyi seçme). Hedef olarak aynı klibi seç. Yalnız kaymayı düzeltir; dönme ve zoom titremesini düzeltmez. Kenarda boşluk kalırsa klibi biraz büyüt.',
+    follow: 'Klibi yakınlaştırır, nesneyi kadrajda tutar. Hedef klip gerekmez, aynı klip kullanılır. Dikey (9:16) videoda "Otomatik zoom" boşluk bırakmaz.'
   };
   function applyMode() {
     var m = $('mode').value;
@@ -48,13 +48,13 @@
 
   // Dinamik zoom açıkken sabit "otomatik zoom" anlamsız; zoom alanı "asgari zoom" olur
   var ZHINT = {
-    auto: 'Position ve Scale birlikte, her kare keyframelenir.',
-    fixed: 'Scale tek bir değere sabitlenir; yalnız Position keyframelenir.',
-    keep: 'Scale\'e hiç dokunulmaz, klibin mevcut Scale değeri kullanılır; yalnız Position keyframelenir.'
+    auto: 'Zoom nesneye göre her karede ayarlanır; kenarda boşluk kalmaz.',
+    fixed: 'Tek zoom değeri kullanılır; yalnız konum hareket eder.',
+    keep: 'Zoom\'a dokunulmaz, klibin mevcut Scale değeri kalır; yalnız konum kayar.'
   };
   function zoomUI() {
     var zm = $('zoomMode').value, auto = zm === 'auto', size = auto && $('sizeTrack').checked;
-    $('zoomLbl').textContent = auto ? 'Asgari zoom (Scale %)' : 'Yakınlaştırma (Scale %)';
+    $('zoomLbl').textContent = auto ? 'En az zoom (%)' : 'Zoom (%)';
     $('zoomHide').classList.toggle('hidden', zm === 'keep');
     $('zoomMaxRow').classList.toggle('hidden', !auto);
     $('sizeRow').classList.toggle('hidden', !auto);
@@ -92,6 +92,35 @@
     ['change', 'input'].forEach(function (ev) { el.addEventListener(ev, function () { if (!applyingPreset && $('preset').value) { $('preset').value = ''; fire($('preset'), 'change'); } }); });
   });
 
+
+
+  // Premiere gibi: sayi kutusunu saga / sola surukleyerek degeri degistir; tiklayip elle de yazabilirsin. Shift = 5 kat hizli.
+  (function () {
+    var TIP = 'Sürükle: değeri değiştir · tıkla: elle yaz · Shift: hızlı';
+    var st = null;
+    function num(el, k, d) { var v = parseFloat(el.getAttribute(k)); return isFinite(v) ? v : d; }
+    each(document.querySelectorAll('input[type=number]'), function (el) {
+      if (!el.title) el.title = TIP;
+      el.addEventListener('mousedown', function (e) {
+        if (e.button !== 0 || el.disabled || el.readOnly) return;
+        st = { el: el, x: e.clientX, v: parseFloat(el.value) || 0, on: false };
+      });
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!st) return;
+      var dx = e.clientX - st.x;
+      if (!st.on) { if (Math.abs(dx) < 4) return; st.on = true; document.body.classList.add('scrubbing'); try { st.el.blur(); window.getSelection().removeAllRanges(); } catch (x) {} }
+      var el = st.el, step = num(el, 'step', 1), mn = num(el, 'min', -Infinity), mx = num(el, 'max', Infinity), dec = step < 1 ? 1 : 0;
+      var v = st.v + (dx / 2) * step * (e.shiftKey ? 5 : 1);
+      v = Math.max(mn, Math.min(mx, v)); v = Number(v.toFixed(dec));
+      if (String(v) !== el.value) { el.value = v; fire(el, 'input'); }
+      e.preventDefault();
+    });
+    window.addEventListener('mouseup', function () {
+      if (!st) return; var s = st; st = null;
+      if (s.on) { document.body.classList.remove('scrubbing'); fire(s.el, 'change'); }
+    });
+  })();
 
   // Takip modeli 'Yalnız konum' ise ölçek/boyut/dönme ayarları gizlenir (veride ölçek yok)
   function modelUI() { document.body.classList.toggle('posonly', $('ownModel').value === 'trans'); }
