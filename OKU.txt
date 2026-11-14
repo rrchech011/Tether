@@ -1,4 +1,4 @@
-TETHER  v2.16.1
+TETHER  v2.16.2
 ==============
 Premiere Pro paneli: videodaki bir nesneyi (yuz, kafa, top...) kare kare izler ve
 hedef klibin Position / Scale / Rotation animasyonuna cevirir (After Effects tarzi takip).
@@ -10,6 +10,7 @@ ENGLISH (short)
   Use: select the clip, go to the frame where the object is visible, press "Grab frame", draw a box over the object, press "Track".
   Then select the target clip(s), press "Get selected clips", pick a mode and press "Apply".
   Language: Settings > General > "Dil / Language" (Turkish / English). New installs follow the system language.
+  What's new in v2.16.2: preview shows a "clip" label on the green frame with a note that it slides opposite to the cross (normal); Stabilize warns when the chosen point wanders (it needs a fixed point); tracking-quality warnings now show in the panel message, not only the log; setup check at startup (ffmpeg, tracking module, host.jsx) with the fix in a top bar.
   What's new in v2.16.1: "Automatic" method switches to "Cursor / small object" by itself for tiny objects (mouse cursor) when point tracking can't hold on; camera follow now works in vertical 9:16 sequences (zoom limit rises automatically, no black bars); shorter, plainer names in the panel; simpler Reframe zoom card; clearer preview (draggable blue cross with live values); usage hints for Stabilize and tracking model; drag number fields left/right like Premiere (or click and type); "Back to previous tracking" button after re-tracking.
   What's new in v2.16.0: English interface; tracking continues after a scene cut when you re-track from there (small objects too);
   "Apply to" (Motion / Transform) moved into the Mode card; clearer hints (why "Track" is disabled); confirmation before "Reset animation";
@@ -29,6 +30,13 @@ KULLANIM (Takip sekmesi)
   Onizleme ustte: ayar degistikce canli guncellenir; kare kaydirici, oynat, ve onizlemede
   surukleyerek hedef konumu / kadraj konumu ayarlanir. Alttaki tutacla boyutu degistir
   (cift tikla: kucult/buyut).
+
+v2.16.2:
+  - ONIZLEME: yesil cerceveye "klip" etiketi (bosluk varsa "klip (bosluk var)") ve "arti sola giderken klip saga kayar, normal" notu.
+  - SABITLE UYARISI: secilen nokta kadrajin %12'sinden fazla geziyorsa onizleme altinda uyari; Sabitle duran bir nokta ister.
+  - KALITE UYARISI: sasirtici sonuclar (ani sicrama, bosluk, donma) artik panel mesajinda da gorunur (⚠ + "Takip kalitesi: ...").
+  - KURULUM KONTROLU: acilista ffmpeg, takip modulu ve host.jsx eksik / eski mi bakar; sorun varsa ustte nedenini ve cozumunu yazar; Teshis tablosunda da gorunur.
+  - track.js, parser.js ve host.jsx DEGISMEDI.
 
 v2.16.1:
   - IMLEC / KUCUK NESNE: "Otomatik" yontem, nesne cok kucukse (fare imleci gibi) ve nokta takibi tutunamazsa kendiliginden "Imlec / kucuk nesne" yontemine gecer. (Testte eski davranis imleci kaybedip %100 izlenmis gibi gosteriyordu.) Cok kucuk nesnede elle "Sablon" secilirse uyari verir.

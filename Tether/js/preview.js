@@ -20,7 +20,7 @@
     attach: 'Mavi artıyı sürükle: hedef, nesneden ne kadar uzakta duracak.',
     snap: 'Mavi artıyı sürükle: hedef, nesneden ne kadar uzakta duracak.',
     stabilize: 'Bu modda önizleme yalnız sonucu gösterir; sürükleme yok.',
-    follow: 'Mavi artıyı sürükle: nesne kadrajın neresinde dursun (ortası 50 / 50).'
+    follow: 'Mavi artıyı sürükle: nesne kadrajın neresinde dursun (ortası 50 / 50). Yeşil çerçeve klibin kendisidir: artı sola giderken klip sağa kayar, bu normaldir.'
   };
   function hintValues(o) {
     var v = function (id) { return $(id) ? Number($(id).value) || 0 : 0; };
@@ -42,7 +42,14 @@
     cv.style.cursor = r.o.mode === 'stabilize' ? 'default' : 'crosshair';
     $('pvLegend').innerHTML = LEG[r.o.mode] || '';
     $('pvLegend').title = $('pvLegend').textContent;
-    $('pvHintTx').textContent = HINT[r.o.mode] || '';
+    var hint = HINT[r.o.mode] || '', warnHint = false;
+    if (r.o.mode === 'stabilize') {   // Sabitle duran bir nokta ister; secilen nokta cok geziyorsa uyar
+      var xs = pts.map(function (q) { return q.cx !== undefined ? q.cx : q.x; }), ys = pts.map(function (q) { return q.cy !== undefined ? q.cy : q.y; });
+      var span = Math.max(Math.max.apply(null, xs) - Math.min.apply(null, xs), Math.max.apply(null, ys) - Math.min.apply(null, ys));
+      if (isFinite(span) && span > 0.12) { warnHint = true; hint = 'Dikkat: seçtiğin nokta kadrajın %' + Math.round(span * 100) + '\'i kadar geziyor. Sabitle duran bir nokta ister (örn. bina köşesi); hareketli nesnede video o nesneyi sabitler. Nesneyi takip etmek istiyorsan "Takip et" modunu kullan.'; }
+    }
+    $('pvHint').classList.toggle('warn', warnHint);
+    $('pvHintTx').textContent = hint;
     var hv = hintValues(r.o); $('pvVal').textContent = hv ? '(' + hv.replace('Yatay', window.T('Yatay')).replace('Dikey', window.T('Dikey')) + ')' : '';
   }
 
@@ -98,7 +105,9 @@
       var oi = d.out[i], wi = d.wNs[i], hi = d.hNs[i], left = oi.x - d.A[0] * wi, top = oi.y - d.A[1] * hi;
       gap = left > 1e-4 || top > 1e-4 || left + wi < 1 - 1e-4 || top + hi < 1 - 1e-4;
       g.save(); g.setLineDash([6, 4]); g.strokeStyle = gap ? '#f06b5b' : '#5fcf80'; g.lineWidth = 1.5;
-      g.strokeRect(X(left), Y(top), wi * L.fw, hi * L.fh); g.restore();
+      g.strokeRect(X(left), Y(top), wi * L.fw, hi * L.fh);
+      g.fillStyle = gap ? '#f06b5b' : '#5fcf80'; g.font = '600 10px sans-serif'; g.fillText(window.T(gap ? 'klip (boşluk var)' : 'klip'), Math.max(L.fx + 4, X(left) + 4), Math.max(L.fy + 12, Y(top) + 12));
+      g.restore();
       handle(o.pin);
       dot(d.S[i], '#f97316', 4);
     } else {

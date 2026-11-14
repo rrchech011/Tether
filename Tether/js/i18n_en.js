@@ -418,6 +418,12 @@ window.TETHER_EN = {
 " sn)": " s)"
 },
 "html": {
+"Mavi artıyı sürükle: nesne kadrajın neresinde dursun (ortası 50 / 50). Yeşil çerçeve klibin kendisidir: artı sola giderken klip sağa kayar, bu normaldir.": "Drag the blue cross: where the object should sit in the frame (center is 50 / 50). The green frame is the clip itself: when the cross goes left the clip slides right, which is normal.",
+"klip (boşluk var)": "clip (gap)",
+"Takip kalitesi": "Tracking quality",
+"Kurulum kontrolü": "Setup check",
+"sorun yok": "no problems",
+"bekleniyor": "pending",
 "Sürükle: değeri değiştir · tıkla: elle yaz · Shift: hızlı": "Drag: change value · click: type · Shift: faster",
 "@Sürükle: değeri değiştir · tıkla: elle yaz · Shift: hızlı": "Drag: change value · click: type · Shift: faster",
 "↶ Önceki takibe dön": "↶ Back to previous tracking",

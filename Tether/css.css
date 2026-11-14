@@ -195,3 +195,4 @@ details.adv.inner .row{margin-top:9px}
 input[type=number]{cursor:ew-resize}input[type=number]:focus{cursor:text}
 body.scrubbing,body.scrubbing *{cursor:ew-resize!important;user-select:none!important}
 #bOwnRestore{margin-top:6px;width:100%}
+#pvHint.warn{color:var(--wn)}

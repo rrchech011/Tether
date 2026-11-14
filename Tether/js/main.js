@@ -110,7 +110,7 @@
   }
 
   /* ===================== v1.9: analiz durumu, asamalar, hatalar, diagnostics ===================== */
-  var PLUGIN_VERSION = '2.16.1';
+  var PLUGIN_VERSION = '2.16.2';
   var TPS_ = (window.MaskParser && MaskParser.TPS) || 254016000000;
 
   function qualityCell(track) {
@@ -121,7 +121,7 @@
   function renderDiag() {
     var dl = $('diagGrid'); if (!dl) return; dl.innerHTML = '';
     var ffp = null; try { ffp = ownFf(); } catch (e) {}
-    var rows = [['Eklenti sürümü', PLUGIN_VERSION], ['ffmpeg', ffp ? 'bulundu' : 'bulunamadı'], ['Takip modülü', window.TetherTrack ? 'yüklü' : 'yüklenemedi'], ['Hedef klip sayısı', String((st.tgts || []).length)], ['Takip noktası', st.tracks && st.tracks[0] ? String(st.tracks[0].points.length) : '—']];
+    var rows = [['Eklenti sürümü', PLUGIN_VERSION], ['ffmpeg', ffp ? 'bulundu' : 'bulunamadı'], ['Takip modülü', window.TetherTrack ? 'yüklü' : 'yüklenemedi'], ['Hedef klip sayısı', String((st.tgts || []).length)], ['Takip noktası', st.tracks && st.tracks[0] ? String(st.tracks[0].points.length) : '—'], ['Kurulum kontrolü', st.installProbs ? (st.installProbs.length ? st.installProbs.join(' | ') : 'sorun yok') : 'bekleniyor']];
     rows.forEach(function (r) { var x = document.createElement('dt'), y = document.createElement('dd'); x.textContent = r[0]; y.textContent = r[1]; dl.appendChild(x); dl.appendChild(y); });
     st.diagRows = rows;
   }
@@ -334,7 +334,7 @@
       showScrub(Number($('ownScrub').value) || 0);
     } catch (e) { ownMsg('HATA: ' + e, 'err'); } finally { ownBusyUI(false); }
   });
-  // v2.16.1: "Önceki takibe dön". Tam takip tekrar çalıştırılınca önceki sonuç saklanır; düğme ikisi arasında geçiş yapar.
+  // v2.16.2: "Önceki takibe dön". Tam takip tekrar çalıştırılınca önceki sonuç saklanır; düğme ikisi arasında geçiş yapar.
   function ownSnap() { return { res: own.res, frames: own.frames, W: own.W, H: own.H, fps: own.fps, nativeFps: own.nativeFps, rect: own.rect ? own.rect.slice() : null, method: own.method, crop: own.crop, cutsIdx: own.cutsIdx, scrub: own.scrub, verRef: own.verRef }; }
   function ownRestoreUI() {
     var b = $('bOwnRestore'); if (!b) return;
@@ -419,9 +419,10 @@
     var ver = null; try { ver = (own.method !== 'small' && own.verRef && own.frames) ? await OWN.verifyTargetAsync(res, own.frames, own.W, own.H, own.verRef.idx, own.verRef.rect, { fps: own.fps, cuts: own.cutsIdx || [], anchors: own.anchors || {} }) : null; } catch (e) { log('Hedef doğrulama atlandı: ' + (e && e.message || e)); }
     var bAlt = $('bOwnAlt'); if (bAlt) { bAlt.classList.toggle('hidden', !own.pair); if (own.pair) bAlt.textContent = ownAltLabel(); }
     own.verify = ver; var vm = ownVerifyText(ver); try { drawConf(own.scrub || 0); } catch (e) {}
+    var qc3 = qualityCell(st.tracks[0]), qBad = !!(qc3 && qc3.level !== 'good'), qTxt = qBad ? ' Takip kalitesi: ' + qc3.text + '. Önizlemede ve grafikte o kareleri kontrol et.' : '';
     var holeTxt = holes ? ' ' + holes + ' kare takipsiz (kapanma / kayıp); arası doğrusal geçilir. Kaydırıcıyla o kareye gidip kutuyu nesneye çek, "Buradan ileri" de.' : '';
     if (vm) ownMsg('⚠ ' + pts.length + ' kare işlendi' + (t0 ? ' (' + ((Date.now() - t0) / 1000).toFixed(1) + ' sn)' : '') + '; hedefin doğru takip edildiği doğrulanamadı. ' + vm + (note || '') + holeTxt + weakTxt + ' Bu bir uyarıdır, kesin hedef kaybı kanıtı değil; kareleri kontrol et. Yeşil yalnızca takip sonucu üretildiğini gösterir; "İzlendi" hedefin doğru olduğunu doğrulamaz. Çubuğun altındaki turuncu / kırmızı şerit şüpheli aralıkları gösterir.', 'warn');
-    else ownMsg('✓ ' + pts.length + ' kare izlendi' + (t0 ? ' (' + ((Date.now() - t0) / 1000).toFixed(1) + ' sn)' : '') + '.' + (note || '') + holeTxt + weakTxt + ' Yeşil yalnızca takip sonucu üretildiğini gösterir; hedefin doğru olduğu doğrulanmadı. Kontrol edip Uygula\'ya geç.', 'ok');
+    else ownMsg((qBad ? '⚠ ' : '✓ ') + pts.length + ' kare izlendi' + (t0 ? ' (' + ((Date.now() - t0) / 1000).toFixed(1) + ' sn)' : '') + '.' + (note || '') + holeTxt + weakTxt + qTxt + ' Yeşil yalnızca takip sonucu üretildiğini gösterir; hedefin doğru olduğu doğrulanmadı. Kontrol edip Uygula\'ya geç.', qBad ? 'warn' : 'ok');
     log('Kendi takibim: ' + pts.length + ' kare, konum + ölçek + dönme.' + (holes ? ' ' + holes + ' kare boş.' : ''));
     if (vm) log('UYARI: Hedef doğrulama (deneysel): ' + vm);
     var qc = qualityCell(st.tracks[0]); if (qc && qc.level !== 'good') log('UYARI: Takip kalitesi: ' + qc.text);
@@ -448,7 +449,7 @@
     if (own.running) { own.cancel = true; if (own.sig && own.sig.kill) own.sig.kill(); return; }
     var inf = own.info, ff = ownFf(); if (!inf || !own.rect || !ff) return;
     own.prevShown = false;
-    if (own.res && own.frames) own.prevRun = ownSnap();   // v2.16.1: yeni takip bu sonucun yerine geçmeden önce saklanır ("Önceki takibe dön")
+    if (own.res && own.frames) own.prevRun = ownSnap();   // v2.16.2: yeni takip bu sonucun yerine geçmeden önce saklanır ("Önceki takibe dön")
     own.cancel = false; ownBusyUI(true); own.pair = null; own.cutsIdx = [];
     var t0 = Date.now();
     try {
@@ -485,7 +486,7 @@
       function cntSc(rr) { var c = 0, q; for (q = scB[0]; q <= scB[1]; q++) if (rr.frames[q]) c++; return c; }
       function onlySc(rr) { return (scN === r.frames.length) ? rr : Object.assign({}, rr, { frames: rr.frames.map(function (f, q) { return inSc(q) ? f : null; }) }); }
       var okN = cntSc(res), relaxedNote = '', mth = $('ownMethod').value;
-      // v2.16.1: kucuk nesne (imlec gibi) + nokta takibi neredeyse hic tutunamadiysa sablona dusmek yerine yerel cozunurluklu "imlec / kucuk nesne" yontemi kullanilir (testte sablon imleci kaybedip %100 izlemis gibi gosteriyordu).
+      // v2.16.2: kucuk nesne (imlec gibi) + nokta takibi neredeyse hic tutunamadiysa sablona dusmek yerine yerel cozunurluklu "imlec / kucuk nesne" yontemi kullanilir (testte sablon imleci kaybedip %100 izlemis gibi gosteriyordu).
       if (mth === 'auto' && !res.cancelled && !own.cancel && r.frames.length > 12 && own.imgW && own.rect && Math.max(own.rect[2] * own.imgW, own.rect[3] * (own.imgH || own.imgW)) < 0.07 * own.imgW && okN < Math.round(scN * 0.5)) {
         log('Nesne küçük ve nokta takibi tutunamadı (' + okN + ' / ' + scN + ' kare): "İmleç / küçük nesne" yöntemine geçildi.');
         await runSmallMode(); return;
@@ -1086,6 +1087,26 @@
     } catch (e) { log('HATA: ' + e); }
   };
   $('mode').addEventListener('change', updateReady);
+  // v2.16.2: Kurulum kontrolü. Açılışta ffmpeg, takip modülü ve host.jsx (Premiere tarafı) eksik / eski mi bakar; sorun varsa üstte ve Günlük'te nedenini + çözümü yazar.
+  var NEED_HOST = ['ppGetSelection', 'ppOwnInfo', 'ppReadKeys', 'ppFindClip', 'ppSetScale', 'ppSaveProject'];
+  async function installCheck() {
+    var probs = [], ffp = null; try { ffp = ownFf(); } catch (e) {}
+    if (!window.TetherTrack) probs.push('Takip modülü yüklenemedi. Eklentiyi yeniden kur (kur.bat / kur.command).');
+    else if (!ffp) probs.push('ffmpeg bulunamadı. kur.bat (Mac: kur.command) dosyasını internete bağlıyken çalıştır.');
+    var r = '';
+    try { r = String(await ev("(function(){var m=[],n=" + JSON.stringify(NEED_HOST) + ",i;for(i=0;i<n.length;i++){try{if(typeof $.global[n[i]]!=='function')m.push(n[i]);}catch(e){m.push(n[i]);}}return m.join(',');})()") || ''); } catch (e) { r = ''; }
+    if (/^pp\w+(,pp\w+)*$/.test(r)) probs.push('Premiere tarafı (host.jsx) eksik ya da eski yüklenmiş (' + r + '). Premiere\'i tamamen kapatıp yeniden aç; olmazsa eklentiyi yeniden kur.');
+    st.installProbs = probs;
+    try { renderDiag(); } catch (e) {}
+    if (!probs.length) return;
+    probs.forEach(function (t) { log('UYARI: Kurulum kontrolü: ' + t); });
+    var b = $('updBar'), tx = $('updBarTxt'), bb = $('updBarBtn');
+    if (b && tx && b.classList.contains('hidden')) {
+      b.classList.remove('hidden'); tx.textContent = 'Kurulum sorunu: ' + probs[0]; $('updBarPct').textContent = ''; $('updBarFill').style.width = '0%';
+      if (bb) { bb.classList.remove('hidden'); bb.textContent = 'Tamam'; bb.onclick = function () { b.classList.add('hidden'); }; }
+    }
+  }
+  setTimeout(installCheck, 1200);
   updateReady(); renderDiag();
   window.MT = { own: own, st: st, compute: compute, previewTarget: previewTarget, save: saveSettings, touch: touch };
   // ===== v2.16 (TEST): guncelleyici arayuzu. Hatalar paneli bozmaz. Otomatik kurulum acikken Premiere kapatilmaz: kurulumdan sonra panel kendini yeniler (calisma varsa kullanici onayi beklenir). =====
